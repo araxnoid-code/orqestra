@@ -14,3 +14,16 @@ where
     /// ring-buffer tempat menyimpan ExecutableTask yang akan dieksekusi oleh workers
     pub(crate) ring_buffer: RingBuffer<T, O, RING_BUFFER_SIZE>,
 }
+
+impl<T, O, const RING_BUFFER_SIZE: usize> TaskCore<T, O, RING_BUFFER_SIZE>
+where
+    T: OrqestraTaskTrait,
+{
+    /// initial TaskCore
+    pub(crate) fn new() -> TaskCore<T, O, RING_BUFFER_SIZE> {
+        Self {
+            in_task: AtomicU64::new(0),
+            ring_buffer: RingBuffer::new(),
+        }
+    }
+}

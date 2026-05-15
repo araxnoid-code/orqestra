@@ -29,6 +29,18 @@ where
     task: Option<ExecutableTask<T, O>>,
     empty: AtomicBool,
 }
+impl<T, O> RingBufferSpace<T, O>
+where
+    T: OrqestraTaskTrait,
+{
+    /// RingBufferSpace initial
+    fn new() -> RingBufferSpace<T, O> {
+        Self {
+            empty: AtomicBool::new(true),
+            task: None,
+        }
+    }
+}
 
 /// RingBuffer, struktur inti untuk membangun ring-buffer
 /// yang akan menampung setiap ExecutableTask yang telah dibuat
@@ -38,13 +50,30 @@ where
 {
     head: Counter,
     tail: Counter,
-    queue: AtomicPtr<[RingBufferSpace<T, O>; RING_BUFFER_SIZE]>,
+    queue: AtomicPtr<Vec<RingBufferSpace<T, O>>>,
 }
 
 impl<T, O, const RING_BUFFER_SIZE: usize> RingBuffer<T, O, RING_BUFFER_SIZE>
 where
     T: OrqestraTaskTrait,
 {
+    /// RingBuffer initial
+    pub(crate) fn new() -> RingBuffer<T, O, RING_BUFFER_SIZE> {
+        Self {
+            head: Counter {
+                idx: AtomicU64::new(0),
+            },
+            tail: Counter {
+                idx: AtomicU64::new(0),
+            },
+            queue: AtomicPtr::new(Box::into_raw(Box::new(
+                (0..RING_BUFFER_SIZE)
+                    .map(|_| RingBufferSpace::new())
+                    .collect(),
+            ))),
+        }
+    }
+
     /// memasukkan ExecutableTask ke dalam ring-buffer
     /// ## Blocking
     /// Saat ring-buffer penuh, maka akan terjadi blocking hingga terdapat space untuk
@@ -54,6 +83,7 @@ where
 
         unsafe {
             let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
+
             let mut yield_counter = 0;
             while !space.empty.load(Ordering::Relaxed) {
                 spin_loop();
@@ -63,7 +93,9 @@ where
                     yield_counter += 1;
                 }
             }
+
             space.task = Some(executable_task);
+            space.empty.store(false, Ordering::Relaxed);
         }
     }
 
@@ -83,6 +115,7 @@ where
             }
 
             space.task = Some(executable_task);
+            space.empty.store(false, Ordering::Relaxed);
             Ok(())
         }
     }
