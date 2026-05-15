@@ -46,7 +46,8 @@ where
 /// yang akan menampung setiap ExecutableTask yang telah dibuat
 pub struct RingBuffer<T, O, const RING_BUFFER_SIZE: usize>
 where
-    T: OrqestraTaskTrait,
+    T: OrqestraTaskTrait + 'static,
+    O: 'static,
 {
     head: Counter,
     tail: Counter,
