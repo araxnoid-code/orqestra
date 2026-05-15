@@ -61,4 +61,21 @@ where
             space.task = Some(executable_task);
         }
     }
+
+    pub(crate) fn try_enqueue(
+        &self,
+        executable_task: ExecutableTask<T, O>,
+    ) -> Result<(), &'static str> {
+        let idx = self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
+
+        unsafe {
+            let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
+            if !space.empty.load(Ordering::Relaxed) {
+                return Err("Cannot insert task because ring buffer is full");
+            }
+
+            space.task = Some(executable_task);
+            Ok(())
+        }
+    }
 }
