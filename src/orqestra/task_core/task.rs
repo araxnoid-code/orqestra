@@ -8,11 +8,8 @@ pub trait OrqestraTaskTrait {}
 /// dapat menjadi job yang dapat dijalankan oleh orqestra
 pub trait OrqestraJobTrait {}
 
-/// trait `OrqestraOutTrait` memungkinkan suatu type data yang mengimplementasikannya
-/// dapat menjadi Output yang dapat dijalankan oleh orqestra
-// trait OrqestraOutTrait {}
-
-///
+/// WaitingTask adalah type data yang digunakan saat spawn suatu task.
+/// WaitingTask tidak hanya sebuah task independent tanpa adanya kemampuan penjadwalan.
 pub struct WaitingTask<T, O>
 where
     T: OrqestraTaskTrait,
@@ -25,6 +22,7 @@ impl<T, O> WaitingTask<T, O>
 where
     T: OrqestraTaskTrait,
 {
+    /// membuat WaitingTask
     pub fn new(f: T) -> WaitingTask<T, O> {
         Self {
             f,
@@ -33,7 +31,8 @@ where
     }
 }
 
-///
+/// ExecutableTask berfungsi untuk menghimpan Task dan Job pada satu type data enum.
+/// berfungsi untuk Orqestra agar bisa mengeksekusi Task dan Job secara bersamaan
 pub(crate) enum ExecutableTask<T, O>
 where
     T: OrqestraTaskTrait,
