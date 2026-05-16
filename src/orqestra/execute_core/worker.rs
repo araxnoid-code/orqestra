@@ -2,7 +2,7 @@ use crate::{DequeueStatus, ExecutableTask, OrqestraTaskTrait, RingBuffer};
 use std::{
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     thread::{park_timeout, yield_now},
     time::Duration,
@@ -15,6 +15,7 @@ where
     O: 'static,
 {
     _id: usize,
+    done_task: Arc<AtomicU64>,
     join_flag: Arc<AtomicBool>,
     break_counter: usize,
     ring_buffer: Arc<RingBuffer<T, O, RING_BUFFER_SIZE>>,
@@ -31,6 +32,7 @@ where
         id: usize,
         join_flag: Arc<AtomicBool>,
         ring_buffer: Arc<RingBuffer<T, O, RING_BUFFER_SIZE>>,
+        done_task: Arc<AtomicU64>,
     ) -> Worker<T, O, RING_BUFFER_SIZE> {
         Self {
             _id: id,
@@ -38,6 +40,7 @@ where
             break_counter: 0,
             ring_buffer,
             order: None,
+            done_task,
         }
     }
 
@@ -66,6 +69,8 @@ where
             if let Some(executable_task) = executable_task {
                 self.break_counter = 0;
                 executable_task.execute_then_update();
+
+                self.done_task.fetch_add(1, Ordering::Relaxed);
             } else {
                 if self.break_counter < 500 {
                     yield_now();

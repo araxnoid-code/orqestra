@@ -1,3 +1,10 @@
+use std::{
+    hint::spin_loop,
+    sync::atomic::Ordering,
+    thread::{park_timeout, yield_now},
+    time::Duration,
+};
+
 use crate::orqestra::{
     execute_core::ExecuteCore,
     task_core::{OrqestraTaskTrait, TaskCore},
@@ -39,6 +46,23 @@ where
 
     /// join
     pub fn join(self) {
-        self.execute_core.join();
+        let mut counter = 0;
+        while self.execute_core.done_task.load(Ordering::Relaxed)
+            < self.task_core.in_task.load(Ordering::Relaxed)
+        {
+            if counter < 500 {
+                yield_now();
+            } else {
+                park_timeout(Duration::from_millis(10));
+                continue;
+            }
+            counter += 1;
+        }
+
+        self.execute_core.join_flag.store(true, Ordering::Relaxed);
+
+        for worker in self.execute_core.workers {
+            worker.join().unwrap();
+        }
     }
 }
