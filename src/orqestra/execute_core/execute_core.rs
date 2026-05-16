@@ -19,11 +19,11 @@ pub struct ExecuteCore<const RING_BUFFER_SIZE: usize, const WORKERS_SIZE: usize>
 impl<const RING_BUFFER_SIZE: usize, const WORKERS_SIZE: usize>
     ExecuteCore<RING_BUFFER_SIZE, WORKERS_SIZE>
 {
-    pub fn new<T, O>(
+    pub(crate) fn new<T, O>(
         ring_buffer: Arc<RingBuffer<T, O, RING_BUFFER_SIZE>>,
     ) -> ExecuteCore<RING_BUFFER_SIZE, WORKERS_SIZE>
     where
-        T: OrqestraTaskTrait + 'static,
+        T: OrqestraTaskTrait<O> + 'static,
         O: 'static,
     {
         let join_flag = Arc::new(AtomicBool::new(false));
@@ -32,7 +32,7 @@ impl<const RING_BUFFER_SIZE: usize, const WORKERS_SIZE: usize>
             let ring_buffer_clone = ring_buffer.clone();
             let join_flag_clone = join_flag.clone();
             thread::spawn(move || {
-                let worker = Worker::new(id, join_flag_clone, ring_buffer_clone);
+                Worker::new(id, join_flag_clone, ring_buffer_clone).running();
             })
         });
 
@@ -40,6 +40,12 @@ impl<const RING_BUFFER_SIZE: usize, const WORKERS_SIZE: usize>
             done_task: AtomicU64::new(0),
             join_flag: AtomicBool::new(false),
             workers,
+        }
+    }
+
+    pub(crate) fn join(self) {
+        for worker in self.workers {
+            worker.join().unwrap();
         }
     }
 }

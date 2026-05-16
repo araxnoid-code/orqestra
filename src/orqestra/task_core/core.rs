@@ -6,7 +6,7 @@ use crate::orqestra::task_core::{OrqestraTaskTrait, RingBuffer};
 /// dan pengalokasiannya ke dalam ring-buffer
 pub struct TaskCore<T, O, const RING_BUFFER_SIZE: usize>
 where
-    T: OrqestraTaskTrait + 'static,
+    T: OrqestraTaskTrait<O> + 'static,
     O: 'static,
 {
     /// menghitung setiap task yang telah terdaftar ke dalam ring-buffer
@@ -18,7 +18,8 @@ where
 
 impl<T, O, const RING_BUFFER_SIZE: usize> TaskCore<T, O, RING_BUFFER_SIZE>
 where
-    T: OrqestraTaskTrait,
+    T: OrqestraTaskTrait<O>,
+    O: 'static,
 {
     /// initial TaskCore
     pub(crate) fn new() -> TaskCore<T, O, RING_BUFFER_SIZE> {

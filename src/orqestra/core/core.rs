@@ -5,7 +5,7 @@ use crate::orqestra::{
 
 pub struct Orqestra<T, O, const RING_BUFFER_SIZE: usize, const WORKERS_SIZE: usize>
 where
-    T: OrqestraTaskTrait + 'static,
+    T: OrqestraTaskTrait<O> + 'static,
     O: 'static,
 {
     task_core: TaskCore<T, O, RING_BUFFER_SIZE>,
@@ -15,7 +15,7 @@ where
 impl<T, O, const RING_BUFFER_SIZE: usize, const WORKERS_SIZE: usize>
     Orqestra<T, O, RING_BUFFER_SIZE, WORKERS_SIZE>
 where
-    T: OrqestraTaskTrait,
+    T: OrqestraTaskTrait<O>,
 {
     /// intial
     pub fn new() -> Orqestra<T, O, RING_BUFFER_SIZE, WORKERS_SIZE> {
@@ -38,5 +38,7 @@ where
     }
 
     /// join
-    pub fn join(self) {}
+    pub fn join(self) {
+        self.execute_core.join();
+    }
 }

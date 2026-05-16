@@ -23,26 +23,27 @@ impl Deref for Counter {
 ///
 pub(crate) enum DequeueStatus<T, O>
 where
-    T: OrqestraTaskTrait + 'static,
+    T: OrqestraTaskTrait<O> + 'static,
     O: 'static,
 {
     Ok(ExecutableTask<T, O>),
     Order(usize),
-    Err,
 }
 
 /// RingBufferSpace, berfungsi untuk sebagai space tempat ExecutableTask disimpan.
 #[repr(align(64))]
 pub(crate) struct RingBufferSpace<T, O>
 where
-    T: OrqestraTaskTrait,
+    T: OrqestraTaskTrait<O>,
+    O: 'static,
 {
     task: Option<ExecutableTask<T, O>>,
     empty: AtomicBool,
 }
 impl<T, O> RingBufferSpace<T, O>
 where
-    T: OrqestraTaskTrait,
+    T: OrqestraTaskTrait<O>,
+    O: 'static,
 {
     /// RingBufferSpace initial
     fn new() -> RingBufferSpace<T, O> {
@@ -57,7 +58,7 @@ where
 /// yang akan menampung setiap ExecutableTask yang telah dibuat
 pub struct RingBuffer<T, O, const RING_BUFFER_SIZE: usize>
 where
-    T: OrqestraTaskTrait + 'static,
+    T: OrqestraTaskTrait<O> + 'static,
     O: 'static,
 {
     head: Counter,
@@ -67,7 +68,8 @@ where
 
 impl<T, O, const RING_BUFFER_SIZE: usize> RingBuffer<T, O, RING_BUFFER_SIZE>
 where
-    T: OrqestraTaskTrait,
+    T: OrqestraTaskTrait<O>,
+    O: 'static,
 {
     /// RingBuffer initial
     pub(crate) fn new() -> RingBuffer<T, O, RING_BUFFER_SIZE> {

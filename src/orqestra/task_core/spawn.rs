@@ -4,7 +4,7 @@ use crate::orqestra::task_core::{ExecutableTask, OrqestraTaskTrait, TaskCore, Wa
 
 impl<T, O, const RING_BUFFER_SIZE: usize> TaskCore<T, O, RING_BUFFER_SIZE>
 where
-    T: OrqestraTaskTrait + 'static,
+    T: OrqestraTaskTrait<O> + 'static,
     O: 'static,
 {
     /// spawning task yang akan disimpan ke dalam ring-buffer
