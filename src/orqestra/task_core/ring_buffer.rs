@@ -20,6 +20,17 @@ impl Deref for Counter {
     }
 }
 
+///
+pub(crate) enum DequeueStatus<T, O>
+where
+    T: OrqestraTaskTrait + 'static,
+    O: 'static,
+{
+    Ok(ExecutableTask<T, O>),
+    Order(usize),
+    Err,
+}
+
 /// RingBufferSpace, berfungsi untuk sebagai space tempat ExecutableTask disimpan.
 #[repr(align(64))]
 pub(crate) struct RingBufferSpace<T, O>
@@ -118,6 +129,36 @@ where
             space.task = Some(executable_task);
             space.empty.store(false, Ordering::Relaxed);
             Ok(())
+        }
+    }
+
+    ///
+    pub(crate) fn dequeue(&self) -> DequeueStatus<T, O> {
+        let idx = self.tail.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
+        unsafe {
+            let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
+            if space.empty.load(Ordering::Relaxed) {
+                return DequeueStatus::Order(idx);
+            }
+
+            let executable_task = space.task.take().unwrap();
+            space.empty.store(true, Ordering::Relaxed);
+
+            return DequeueStatus::Ok(executable_task);
+        }
+    }
+
+    pub(crate) fn dequeue_via_order(&self, idx: usize) -> DequeueStatus<T, O> {
+        unsafe {
+            let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
+            if space.empty.load(Ordering::Relaxed) {
+                return DequeueStatus::Order(idx);
+            }
+
+            let executable_task = space.task.take().unwrap();
+            space.empty.store(true, Ordering::Relaxed);
+
+            return DequeueStatus::Ok(executable_task);
         }
     }
 }
