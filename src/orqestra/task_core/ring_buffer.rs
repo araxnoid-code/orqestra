@@ -1,6 +1,7 @@
 use std::{
     hint::spin_loop,
     ops::Deref,
+    ptr::null_mut,
     sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering},
     thread::yield_now,
 };
@@ -161,6 +162,14 @@ where
             space.empty.store(true, Ordering::Relaxed);
 
             return DequeueStatus::Ok(executable_task);
+        }
+    }
+
+    pub(crate) fn drop_queue(&self) {
+        unsafe {
+            drop(Box::from_raw(
+                self.queue.swap(null_mut(), Ordering::Relaxed),
+            ));
         }
     }
 }

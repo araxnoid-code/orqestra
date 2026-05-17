@@ -64,5 +64,6 @@ where
         for worker in self.execute_core.workers {
             worker.join().unwrap();
         }
+        self.task_core.ring_buffer.drop_queue();
     }
 }
