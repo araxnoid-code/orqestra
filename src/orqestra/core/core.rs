@@ -9,12 +9,29 @@ use crate::orqestra::{
     task_core::{OrqestraTaskTrait, TaskCore},
 };
 
+/// The main structure in managing the generated tasks,
+/// allocation into ring-buffers, managing workflows
+/// and synchronizing between ExecutableTask and worker management.
+/// ## 2 Main Core
+/// ### TaskCore
+/// The part responsible for processing tasks and jobs, creating ExecutableTask,
+/// and managing the ring buffer. Adding(enqueue) and removing(dequeue) elements must be done
+/// through the Ring Buffer in the TaskCore structure.
+/// ### ExecuteCore
+/// The part that functions as the task executor in the ring-buffer,
+/// has a Thread Pool where each thread will access the ring-buffer simultaneously.
 pub struct Orqestra<T, O, const RING_BUFFER_SIZE: usize, const WORKERS_SIZE: usize>
 where
     T: OrqestraTaskTrait<O> + 'static,
     O: 'static,
 {
+    /// The part responsible for processing tasks and jobs, creating ExecutableTask,
+    /// and managing the ring buffer. Adding(enqueue) and removing(dequeue) elements must be done
+    /// through the Ring Buffer in the TaskCore structure.
     task_core: TaskCore<T, O, RING_BUFFER_SIZE>,
+
+    /// The part that functions as the task executor in the ring-buffer,
+    /// has a Thread Pool where each thread will access the ring-buffer
     execute_core: ExecuteCore<RING_BUFFER_SIZE, WORKERS_SIZE>,
 }
 

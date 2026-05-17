@@ -7,11 +7,11 @@ where
     T: OrqestraTaskTrait<O> + 'static,
     O: 'static,
 {
-    /// spawning task yang akan disimpan ke dalam ring-buffer
-    /// serta akan dieksekusi oleh workers
+    /// spawning task that will be saved into the ring-buffer
+    /// will be executed by workers
     /// ## Blocking
-    /// Saat ring-buffer penuh, maka akan terjadi blocking hingga terdapat space untuk
-    /// mengalokasikan ExecutableTask
+    // When the ring buffer is full,
+    // blocking occurs until there is space to allocate an ExecutableTask.
     pub(crate) fn spawn_task(&self, task: T) {
         self.in_task.fetch_add(1, Ordering::Relaxed);
 
@@ -19,10 +19,10 @@ where
         self.ring_buffer.enqueue(executable_task);
     }
 
-    /// spawning task yang akan disimpan ke dalam ring-buffer
-    /// serta akan dieksekusi oleh workers
-    /// ## non-Blocking
-    /// Saat ring-buffer penuh, maka akan mengembalikan tipe data Result::Err(&'static str)
+    // spawning tasks that will be stored in the ring-buffer
+    // will be executed by workers
+    /// ## non Blocking
+    /// When the ring-buffer is full, it will return the Result::Err data type.
     pub(crate) fn try_spawn_task(&self, task: T) -> Result<(), &'static str> {
         self.in_task.fetch_add(1, Ordering::Relaxed);
 
