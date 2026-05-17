@@ -64,6 +64,10 @@ where
 
 /// RingBuffer, the core structure for building a ring buffer
 /// that will hold every ExecutableTask created.
+///
+/// ## RING_BUFFER_SIZE
+/// ring-buffer size depends on const value RING_BUFFER_SIZE,
+/// manual initialization is required for RING_BUFFER_SIZE
 pub struct RingBuffer<T, O, const RING_BUFFER_SIZE: usize>
 where
     T: OrqestraTaskTrait<O> + 'static,

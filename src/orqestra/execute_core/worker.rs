@@ -8,17 +8,29 @@ use std::{
     time::Duration,
 };
 
-///
+/// structure that functions to execute ExecutableTask on the ring-buffer
 pub(crate) struct Worker<T, O, const RING_BUFFER_SIZE: usize>
 where
     T: OrqestraTaskTrait<O> + 'static,
     O: 'static,
 {
+    /// identifier
     _id: usize,
+
+    /// to count how many tasks have been completed
     done_task: Arc<AtomicU64>,
+
+    /// serves to provide a signal to end the iteration
     join_flag: Arc<AtomicBool>,
+
+    /// useful for entering idle mode
     break_counter: usize,
+
+    /// to enqueue and dequeue an ExecutableTask
     ring_buffer: Arc<RingBuffer<T, O, RING_BUFFER_SIZE>>,
+
+    /// save the obtained index in the ring-buffer,
+    /// but there is still no ExecutableTask in that index
     order: Option<usize>,
 }
 
@@ -44,7 +56,23 @@ where
         }
     }
 
+    /// The execution flow is as follows:
+    /// 1. Checks whether any indexes have been previously reserved.
+    /// If so, checks them using the RingBuffer::dequeue_via_order method:
+    /// If DequeueStatus::Ok, it will receive an ExecutableTask.
+    /// If DequeueStatus::Order, it will return the same index and store it for the next iteration.
     ///
+    /// 2. If no indexes have been reserved, the worker will use the RingBuffer::dequeue method:
+    /// If DequeueStatus::Ok, it will receive an ExecutableTask.
+    /// If DequeueStatus::Order, it will store the index it received for checking in the next iteration.
+    ///
+    /// 3. If it receives an ExecutableTask,
+    /// the worker will immediately execute it.
+    ///
+    /// 4. When the worker is not executing any ExecutableTasks,
+    /// it will periodically update the break_counter until it enters idle mode,
+    /// where it executes `yield_now` and `park_timeout` is incremented.
+    /// When a worker receives an ExecutableTask, the break_counter is set to 0.
     pub(crate) fn running(&mut self) {
         loop {
             if self.join_flag.load(Ordering::Relaxed) {

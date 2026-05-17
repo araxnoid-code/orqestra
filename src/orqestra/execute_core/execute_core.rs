@@ -9,16 +9,36 @@ use std::{
 
 use crate::{OrqestraTaskTrait, RingBuffer, orqestra::execute_core::Worker};
 
-///
+/// The part that functions as the task executor in the ring-buffer,
+/// has a Thread Pool where each thread will access the ring-buffer simultaneously.
+/// ## WORKERS_SIZE
+/// The number of threads (workers) depends on the const value of WORKERS_SIZE,
+/// manual initialization is required for WORKERS_SIZE
 pub struct ExecuteCore<const RING_BUFFER_SIZE: usize, const WORKERS_SIZE: usize> {
+    /// to count how many tasks have been completed
     pub(crate) done_task: Arc<AtomicU64>,
+
+    /// serves to provide a signal to end the iteration
     pub(crate) join_flag: Arc<AtomicBool>,
+
+    /// thread pool, stores threads (workers) that have been spawned
     pub(crate) workers: [JoinHandle<()>; WORKERS_SIZE],
 }
 
 impl<const RING_BUFFER_SIZE: usize, const WORKERS_SIZE: usize>
     ExecuteCore<RING_BUFFER_SIZE, WORKERS_SIZE>
 {
+    /// ExecuteCore initialization, Requires a generic Structure in the form of:
+    ///
+    /// ExecuteCore::new<T, O>
+    ///
+    /// T: implements OrqestraTaskTrait<O> + 'static
+    /// O: 'static
+    ///
+    /// T, functions for the type of data that will become a task
+    /// O, functions for the output of spawned tasks/jobs
+    ///
+    /// will immediately spawn threads of the number of WORKERS_SIZE and store them as a thread pool
     pub(crate) fn new<T, O>(
         ring_buffer: Arc<RingBuffer<T, O, RING_BUFFER_SIZE>>,
     ) -> ExecuteCore<RING_BUFFER_SIZE, WORKERS_SIZE>
