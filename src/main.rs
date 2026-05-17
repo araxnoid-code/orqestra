@@ -1,18 +1,17 @@
 use orqestra::{Orqestra, OrqestraTaskTrait};
 
-struct MyTask(usize);
+struct MyTask;
 impl OrqestraTaskTrait<()> for MyTask {
     fn execute(&self) -> () {
-        println!("execute! {}", self.0);
+        println!("execute!");
     }
 }
 
 fn main() {
-    let orqestra: Orqestra<MyTask, _, 64, 4> = Orqestra::new();
+    let orqestra: Orqestra<MyTask, _, 32, 4> = Orqestra::new();
 
-    for i in 0..100 {
-        orqestra.spawn_task(MyTask(i));
-    }
+    orqestra.try_spawn_task(MyTask).unwrap();
+    orqestra.try_spawn_task(MyTask).unwrap();
 
     orqestra.join();
 }
