@@ -18,7 +18,13 @@ where
 
 /// The `OrqestraJobTrait` trait allows any data type that implements
 /// it to be a job that can be run by `Orqestra`
-pub trait OrqestraJobTrait {}
+pub trait OrqestraJobTrait<O>
+where
+    O: 'static,
+{
+    /// the main function that will be executed by the Worker
+    fn execute(&self) -> O;
+}
 
 /// Writing Task is a data type used when spawning a task.
 /// WaitingTask is just an independent task without any scheduling capabilities.
