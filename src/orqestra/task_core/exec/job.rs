@@ -6,19 +6,27 @@ use std::{
     },
 };
 
-use crate::OrqestraJobTrait;
-
 ///
 pub struct InnerJob<J, O>
 where
     J: OrqestraJobTrait<O>,
     O: 'static,
 {
-    exec_counter: AtomicUsize,
-    f: J,
-    return_value: Arc<(RefCell<Option<O>>, AtomicBool)>,
-    next_jobs: RefCell<Vec<Arc<InnerJob<J, O>>>>,
-    dep: RefCell<Vec<Arc<(RefCell<Option<O>>, AtomicBool)>>>,
+    pub(crate) exec_counter: AtomicUsize,
+    pub(crate) f: J,
+    pub(crate) return_value: Arc<(RefCell<Option<O>>, AtomicBool)>,
+    pub(crate) next_jobs: RefCell<Vec<Arc<InnerJob<J, O>>>>,
+    pub(crate) dep: RefCell<Vec<Arc<(RefCell<Option<O>>, AtomicBool)>>>,
+}
+
+/// The `OrqestraJobTrait` trait allows any data type that implements
+/// it to be a job that can be run by `Orqestra`
+pub trait OrqestraJobTrait<O>
+where
+    O: 'static,
+{
+    /// the main function that will be executed by the Worker
+    fn execute(&self) -> O;
 }
 
 impl<J, O> InnerJob<J, O>
