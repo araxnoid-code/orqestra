@@ -1,6 +1,6 @@
 use std::sync::{Arc, atomic::Ordering};
 
-use crate::{Job, OrqestraJobTrait, OrqestraTaskTrait, WaitingTask};
+use crate::{InnerJob, OrqestraJobTrait, OrqestraTaskTrait, RingBufferTrait, WaitingTask};
 
 /// ExecutableTask functions to store Tasks and Jobs in one enum data type.
 /// useful for `Orqestra` to be able to process Task and job data types simultaneously.
@@ -12,7 +12,7 @@ where
 {
     /// save the spawned Task
     Task(WaitingTask<T, O>),
-    Job(Arc<Job<J, O>>),
+    Job(Arc<InnerJob<J, O>>),
 }
 
 impl<J, T, O> ExecutableTask<T, J, O>
@@ -25,7 +25,20 @@ where
     pub(crate) fn execute(&self) -> O {
         match self {
             ExecutableTask::Task(task) => task.f.execute(),
-            ExecutableTask::Job(job) => job.inner.f.execute(),
+            ExecutableTask::Job(job) => job.f.execute(),
+        }
+    }
+
+    pub fn next_job<R>(&self, ring_buffer: &R)
+    where
+        R: RingBufferTrait<T, J, O>,
+    {
+        if let ExecutableTask::Job(job) = self {
+            for job in job.next_jobs.take() {
+                if job.exec_counter.fetch_sub(1, Ordering::Relaxed) == 1 {
+                    ring_buffer.enqueue(Self::Job(job));
+                };
+            }
         }
     }
 
@@ -37,8 +50,8 @@ where
                 task.return_value.1.store(true, Ordering::Relaxed);
             }
             ExecutableTask::Job(job) => {
-                job.inner.return_value.0.replace(Some(value));
-                job.inner.return_value.1.store(true, Ordering::Relaxed);
+                job.return_value.0.replace(Some(value));
+                job.return_value.1.store(true, Ordering::Relaxed);
             }
         };
     }

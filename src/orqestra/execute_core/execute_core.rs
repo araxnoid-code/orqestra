@@ -7,7 +7,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use crate::{OrqestraJobTrait, OrqestraTaskTrait, RingBuffer, orqestra::execute_core::Worker};
+use crate::{OrqestraJobTrait, OrqestraTaskTrait, RingBufferCore, orqestra::execute_core::Worker};
 
 /// The part that functions as the task executor in the ring-buffer,
 /// has a Thread Pool where each thread will access the ring-buffer simultaneously.
@@ -40,7 +40,7 @@ impl<const RING_BUFFER_SIZE: usize, const WORKERS_SIZE: usize>
     ///
     /// will immediately spawn threads of the number of WORKERS_SIZE and store them as a thread pool
     pub(crate) fn new<T, J, O>(
-        ring_buffer: Arc<RingBuffer<T, J, O, RING_BUFFER_SIZE>>,
+        ring_buffer: Arc<RingBufferCore<T, J, O, RING_BUFFER_SIZE>>,
     ) -> ExecuteCore<RING_BUFFER_SIZE, WORKERS_SIZE>
     where
         T: OrqestraTaskTrait<O> + 'static,

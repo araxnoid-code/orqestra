@@ -1,15 +1,12 @@
 use std::{
-    sync::atomic::Ordering,
+    sync::{Arc, atomic::Ordering},
     thread::{park_timeout, yield_now},
     time::Duration,
 };
 
 use crate::{
-    OrqestraJobTrait,
-    orqestra::{
-        execute_core::ExecuteCore,
-        task_core::{OrqestraTaskTrait, TaskCore},
-    },
+    ExecutableTask, Job, OrqestraJobTrait, OrqestraTaskTrait, RingBufferCore, WaitingTask,
+    orqestra::execute_core::ExecuteCore,
 };
 
 /// The main structure in managing the generated tasks,
@@ -32,7 +29,7 @@ where
     /// The part responsible for processing tasks and jobs, creating ExecutableTask,
     /// and managing the ring buffer. Adding(enqueue) and removing(dequeue) elements must be done
     /// through the Ring Buffer in the TaskCore structure.
-    task_core: TaskCore<T, J, O, RING_BUFFER_SIZE>,
+    ring_buffer_core: Arc<RingBufferCore<T, J, O, RING_BUFFER_SIZE>>,
 
     /// The part that functions as the task executor in the ring-buffer,
     /// has a Thread Pool where each thread will access the ring-buffer
@@ -49,10 +46,10 @@ where
     /// initial requires manual initialization of the data type as
     /// task, job and size of the ring-buffer and the number of workers to spawn
     pub fn new() -> Orqestra<T, J, O, RING_BUFFER_SIZE, WORKERS_SIZE> {
-        let task_core = TaskCore::new();
-        let execute_core = ExecuteCore::new(task_core.ring_buffer.clone());
+        let ring_buffer_core = Arc::new(RingBufferCore::new());
+        let execute_core = ExecuteCore::new(ring_buffer_core.clone());
         Self {
-            task_core,
+            ring_buffer_core,
             execute_core,
         }
     }
@@ -81,7 +78,8 @@ where
     /// ## Blocking
     /// When the ring buffer is full, blocking will occur until there is space for the task that has been spawned.
     pub fn spawn_task(&self, task: T) {
-        self.task_core.spawn_task(task);
+        self.ring_buffer_core
+            .enqueue(ExecutableTask::Task(WaitingTask::new(task)));
     }
 
     /// serves to spawn a task that will be executed by workers in Orqestra
@@ -108,7 +106,13 @@ where
     /// ## non Blocking
     /// when the ring-buffer is full, it will give Result::Err.
     pub fn try_spawn_task(&self, task: T) -> Result<(), &str> {
-        self.task_core.try_spawn_task(task)
+        self.ring_buffer_core
+            .try_enqueue(ExecutableTask::Task(WaitingTask::new(task)))
+    }
+
+    pub fn job_exec(&self, job: Job<J, O>) {
+        self.ring_buffer_core
+            .enqueue(ExecutableTask::Job(job.inner));
     }
 
     /// At the end of the Orchestra flow, blocking will occur until all spawned
@@ -116,7 +120,7 @@ where
     pub fn join(self) {
         let mut counter = 0;
         while self.execute_core.done_task.load(Ordering::Relaxed)
-            < self.task_core.in_task.load(Ordering::Relaxed)
+            < self.ring_buffer_core.in_task.load(Ordering::Relaxed)
         {
             if counter < 500 {
                 yield_now();
@@ -133,6 +137,6 @@ where
             worker.join().unwrap();
         }
 
-        self.task_core.ring_buffer.drop_queue();
+        self.ring_buffer_core.drop_queue();
     }
 }

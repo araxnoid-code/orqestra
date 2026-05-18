@@ -1,4 +1,4 @@
-use crate::{DequeueStatus, OrqestraJobTrait, OrqestraTaskTrait, RingBuffer};
+use crate::{DequeueStatus, OrqestraJobTrait, OrqestraTaskTrait, RingBufferCore};
 use std::{
     sync::{
         Arc,
@@ -28,7 +28,7 @@ where
     break_counter: usize,
 
     /// to enqueue and dequeue an ExecutableTask
-    ring_buffer: Arc<RingBuffer<T, J, O, RING_BUFFER_SIZE>>,
+    ring_buffer: Arc<RingBufferCore<T, J, O, RING_BUFFER_SIZE>>,
 
     /// save the obtained index in the ring-buffer,
     /// but there is still no ExecutableTask in that index
@@ -45,7 +45,7 @@ where
     pub(crate) fn new(
         id: usize,
         join_flag: Arc<AtomicBool>,
-        ring_buffer: Arc<RingBuffer<T, J, O, RING_BUFFER_SIZE>>,
+        ring_buffer: Arc<RingBufferCore<T, J, O, RING_BUFFER_SIZE>>,
         done_task: Arc<AtomicU64>,
     ) -> Worker<T, J, O, RING_BUFFER_SIZE> {
         Self {
@@ -98,7 +98,9 @@ where
 
             if let Some(executable_task) = executable_task {
                 self.break_counter = 0;
+
                 executable_task.execute_then_update();
+                executable_task.next_job(&*self.ring_buffer);
 
                 self.done_task.fetch_add(1, Ordering::Relaxed);
             } else {

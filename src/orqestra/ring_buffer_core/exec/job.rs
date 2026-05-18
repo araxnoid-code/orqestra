@@ -65,7 +65,7 @@ where
         }
     }
 
-    pub fn after(&self, job: &Job<J, O>) {
+    pub fn after(self, job: &Job<J, O>) -> Self {
         self.inner.exec_counter.fetch_add(1, Ordering::Relaxed);
         self.inner
             .dep
@@ -73,5 +73,6 @@ where
             .push(job.inner.return_value.clone());
 
         job.inner.next_jobs.borrow_mut().push(self.inner.clone());
+        self
     }
 }
