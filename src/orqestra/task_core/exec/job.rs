@@ -51,7 +51,7 @@ where
     J: OrqestraJobTrait<O>,
     O: 'static,
 {
-    inner: Arc<InnerJob<J, O>>,
+    pub(crate) inner: Arc<InnerJob<J, O>>,
 }
 
 impl<J, O> Job<J, O>

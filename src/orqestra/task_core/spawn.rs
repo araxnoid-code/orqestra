@@ -1,10 +1,14 @@
 use std::sync::atomic::Ordering;
 
-use crate::orqestra::task_core::{ExecutableTask, OrqestraTaskTrait, TaskCore, WaitingTask};
+use crate::{
+    OrqestraJobTrait,
+    orqestra::task_core::{ExecutableTask, OrqestraTaskTrait, TaskCore, WaitingTask},
+};
 
-impl<T, O, const RING_BUFFER_SIZE: usize> TaskCore<T, O, RING_BUFFER_SIZE>
+impl<T, J, O, const RING_BUFFER_SIZE: usize> TaskCore<T, J, O, RING_BUFFER_SIZE>
 where
     T: OrqestraTaskTrait<O> + 'static,
+    J: OrqestraJobTrait<O> + 'static,
     O: 'static,
 {
     /// spawning task that will be saved into the ring-buffer

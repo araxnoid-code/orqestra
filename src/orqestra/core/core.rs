@@ -4,9 +4,12 @@ use std::{
     time::Duration,
 };
 
-use crate::orqestra::{
-    execute_core::ExecuteCore,
-    task_core::{OrqestraTaskTrait, TaskCore},
+use crate::{
+    OrqestraJobTrait,
+    orqestra::{
+        execute_core::ExecuteCore,
+        task_core::{OrqestraTaskTrait, TaskCore},
+    },
 };
 
 /// The main structure in managing the generated tasks,
@@ -20,29 +23,32 @@ use crate::orqestra::{
 /// ### ExecuteCore
 /// The part that functions as the task executor in the ring-buffer,
 /// has a Thread Pool where each thread will access the ring-buffer simultaneously.
-pub struct Orqestra<T, O, const RING_BUFFER_SIZE: usize, const WORKERS_SIZE: usize>
+pub struct Orqestra<T, J, O, const RING_BUFFER_SIZE: usize, const WORKERS_SIZE: usize>
 where
     T: OrqestraTaskTrait<O> + 'static,
+    J: OrqestraJobTrait<O> + 'static,
     O: 'static,
 {
     /// The part responsible for processing tasks and jobs, creating ExecutableTask,
     /// and managing the ring buffer. Adding(enqueue) and removing(dequeue) elements must be done
     /// through the Ring Buffer in the TaskCore structure.
-    task_core: TaskCore<T, O, RING_BUFFER_SIZE>,
+    task_core: TaskCore<T, J, O, RING_BUFFER_SIZE>,
 
     /// The part that functions as the task executor in the ring-buffer,
     /// has a Thread Pool where each thread will access the ring-buffer
     execute_core: ExecuteCore<RING_BUFFER_SIZE, WORKERS_SIZE>,
 }
 
-impl<T, O, const RING_BUFFER_SIZE: usize, const WORKERS_SIZE: usize>
-    Orqestra<T, O, RING_BUFFER_SIZE, WORKERS_SIZE>
+impl<T, J, O, const RING_BUFFER_SIZE: usize, const WORKERS_SIZE: usize>
+    Orqestra<T, J, O, RING_BUFFER_SIZE, WORKERS_SIZE>
 where
+    J: OrqestraJobTrait<O> + 'static,
     T: OrqestraTaskTrait<O>,
+    O: 'static,
 {
     /// initial requires manual initialization of the data type as
     /// task, job and size of the ring-buffer and the number of workers to spawn
-    pub fn new() -> Orqestra<T, O, RING_BUFFER_SIZE, WORKERS_SIZE> {
+    pub fn new() -> Orqestra<T, J, O, RING_BUFFER_SIZE, WORKERS_SIZE> {
         let task_core = TaskCore::new();
         let execute_core = ExecuteCore::new(task_core.ring_buffer.clone());
         Self {

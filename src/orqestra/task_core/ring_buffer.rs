@@ -6,7 +6,10 @@ use std::{
     thread::yield_now,
 };
 
-use crate::orqestra::task_core::{ExecutableTask, OrqestraTaskTrait};
+use crate::{
+    OrqestraJobTrait,
+    orqestra::task_core::{ExecutableTask, OrqestraTaskTrait},
+};
 
 /// counter, as a wrapper of AtomicU64.
 #[repr(align(64))]
@@ -22,13 +25,14 @@ impl Deref for Counter {
 }
 
 /// gives status to the process of taking tasks on the ring-buffer.
-pub(crate) enum DequeueStatus<T, O>
+pub(crate) enum DequeueStatus<T, J, O>
 where
     T: OrqestraTaskTrait<O> + 'static,
+    J: OrqestraJobTrait<O> + 'static,
     O: 'static,
 {
     /// when dequeuing to retrieve an Executable Task and succeeding at that time
-    Ok(ExecutableTask<T, O>),
+    Ok(ExecutableTask<T, J, O>),
     /// When dequeuing to retrieve an ExecutableTask but getting no ExecutableTask,
     /// the Order will have the usize value as the index at the previously empty ExecutableTask location,
     /// useful for workers to periodically check the location at the index obtained until
@@ -38,23 +42,25 @@ where
 
 /// Ring Buffer Space, functions as a space where Executable Tasks are stored.
 #[repr(align(64))]
-pub(crate) struct RingBufferSpace<T, O>
+pub(crate) struct RingBufferSpace<T, J, O>
 where
-    T: OrqestraTaskTrait<O>,
+    T: OrqestraTaskTrait<O> + 'static,
+    J: OrqestraJobTrait<O> + 'static,
     O: 'static,
 {
     /// serves to store ExecutableTask
-    task: Option<ExecutableTask<T, O>>,
+    task: Option<ExecutableTask<T, J, O>>,
     /// serves to indicate whether the space is empty
     empty: AtomicBool,
 }
-impl<T, O> RingBufferSpace<T, O>
+impl<T, J, O> RingBufferSpace<T, J, O>
 where
-    T: OrqestraTaskTrait<O>,
+    T: OrqestraTaskTrait<O> + 'static,
+    J: OrqestraJobTrait<O> + 'static,
     O: 'static,
 {
     /// RingBufferSpace initial with default value.
-    fn new() -> RingBufferSpace<T, O> {
+    fn new() -> RingBufferSpace<T, J, O> {
         Self {
             task: None,
             empty: AtomicBool::new(true),
@@ -68,9 +74,10 @@ where
 /// ## RING_BUFFER_SIZE
 /// ring-buffer size depends on const value RING_BUFFER_SIZE,
 /// manual initialization is required for RING_BUFFER_SIZE
-pub struct RingBuffer<T, O, const RING_BUFFER_SIZE: usize>
+pub struct RingBuffer<T, J, O, const RING_BUFFER_SIZE: usize>
 where
     T: OrqestraTaskTrait<O> + 'static,
+    J: OrqestraJobTrait<O> + 'static,
     O: 'static,
 {
     /// functions to determine the index in allocating ExecutableTask in the ring buffer, the main function of the enqueue logic
@@ -79,16 +86,17 @@ where
     tail: Counter,
     /// a place to store tasks that is possible in multi producer and multi consumer
     /// because of the synchronization between indexes by head and tail and by `RingBufferSpace`
-    queue: AtomicPtr<Vec<RingBufferSpace<T, O>>>,
+    queue: AtomicPtr<Vec<RingBufferSpace<T, J, O>>>,
 }
 
-impl<T, O, const RING_BUFFER_SIZE: usize> RingBuffer<T, O, RING_BUFFER_SIZE>
+impl<T, J, O, const RING_BUFFER_SIZE: usize> RingBuffer<T, J, O, RING_BUFFER_SIZE>
 where
-    T: OrqestraTaskTrait<O>,
+    T: OrqestraTaskTrait<O> + 'static,
+    J: OrqestraJobTrait<O> + 'static,
     O: 'static,
 {
     /// RingBuffer initial
-    pub(crate) fn new() -> RingBuffer<T, O, RING_BUFFER_SIZE> {
+    pub(crate) fn new() -> RingBuffer<T, J, O, RING_BUFFER_SIZE> {
         Self {
             head: Counter {
                 idx: AtomicU64::new(0),
@@ -111,7 +119,7 @@ where
     /// ## Blocking
     // When the ring buffer is full, blocking will occur
     // until there is space to allocate an ExecutableTask.
-    pub(crate) fn enqueue(&self, executable_task: ExecutableTask<T, O>) {
+    pub(crate) fn enqueue(&self, executable_task: ExecutableTask<T, J, O>) {
         let idx = self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
 
         unsafe {
@@ -140,7 +148,7 @@ where
     /// When the ring-buffer is full, it will return the data type Result::Err
     pub(crate) fn try_enqueue(
         &self,
-        executable_task: ExecutableTask<T, O>,
+        executable_task: ExecutableTask<T, J, O>,
     ) -> Result<(), &'static str> {
         let idx = self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
 
@@ -163,7 +171,7 @@ where
     /// When the worker does not get an ExecutableTask at an index that it gets from the tail,
     /// the function will return DequeueStatus::Order(usize) which is useful for being stored by the worker
     /// and will be checked periodically until a thread adds an ExecutableTask to that index.
-    pub(crate) fn dequeue(&self) -> DequeueStatus<T, O> {
+    pub(crate) fn dequeue(&self) -> DequeueStatus<T, J, O> {
         let idx = self.tail.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
         unsafe {
             let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
@@ -180,7 +188,7 @@ where
 
     /// take ExecutableTask from ring buffer
     /// Data retrieval is based on the index entered via the idx parameters.
-    pub(crate) fn dequeue_via_order(&self, idx: usize) -> DequeueStatus<T, O> {
+    pub(crate) fn dequeue_via_order(&self, idx: usize) -> DequeueStatus<T, J, O> {
         unsafe {
             let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
             if space.empty.load(Ordering::Relaxed) {

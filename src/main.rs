@@ -1,4 +1,4 @@
-use orqestra::{Orqestra, OrqestraTaskTrait};
+use orqestra::{Orqestra, OrqestraJobTrait, OrqestraTaskTrait};
 
 struct MyTask;
 impl OrqestraTaskTrait<()> for MyTask {
@@ -7,8 +7,14 @@ impl OrqestraTaskTrait<()> for MyTask {
     }
 }
 
+impl OrqestraJobTrait<()> for MyTask {
+    fn execute(&self) -> () {
+        println!("job execute!");
+    }
+}
+
 fn main() {
-    let orqestra: Orqestra<MyTask, _, 32, 4> = Orqestra::new();
+    let orqestra: Orqestra<MyTask, MyTask, _, 32, 4> = Orqestra::new();
 
     orqestra.try_spawn_task(MyTask).unwrap();
     orqestra.try_spawn_task(MyTask).unwrap();

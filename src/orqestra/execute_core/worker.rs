@@ -1,4 +1,4 @@
-use crate::{DequeueStatus, OrqestraTaskTrait, RingBuffer};
+use crate::{DequeueStatus, OrqestraJobTrait, OrqestraTaskTrait, RingBuffer};
 use std::{
     sync::{
         Arc,
@@ -9,9 +9,10 @@ use std::{
 };
 
 /// structure that functions to execute ExecutableTask on the ring-buffer
-pub(crate) struct Worker<T, O, const RING_BUFFER_SIZE: usize>
+pub(crate) struct Worker<T, J, O, const RING_BUFFER_SIZE: usize>
 where
     T: OrqestraTaskTrait<O> + 'static,
+    J: OrqestraJobTrait<O> + 'static,
     O: 'static,
 {
     /// identifier
@@ -27,25 +28,26 @@ where
     break_counter: usize,
 
     /// to enqueue and dequeue an ExecutableTask
-    ring_buffer: Arc<RingBuffer<T, O, RING_BUFFER_SIZE>>,
+    ring_buffer: Arc<RingBuffer<T, J, O, RING_BUFFER_SIZE>>,
 
     /// save the obtained index in the ring-buffer,
     /// but there is still no ExecutableTask in that index
     order: Option<usize>,
 }
 
-impl<T, O, const RING_BUFFER_SIZE: usize> Worker<T, O, RING_BUFFER_SIZE>
+impl<T, J, O, const RING_BUFFER_SIZE: usize> Worker<T, J, O, RING_BUFFER_SIZE>
 where
-    T: OrqestraTaskTrait<O>,
+    T: OrqestraTaskTrait<O> + 'static,
+    J: OrqestraJobTrait<O> + 'static,
     O: 'static,
 {
     /// initial
     pub(crate) fn new(
         id: usize,
         join_flag: Arc<AtomicBool>,
-        ring_buffer: Arc<RingBuffer<T, O, RING_BUFFER_SIZE>>,
+        ring_buffer: Arc<RingBuffer<T, J, O, RING_BUFFER_SIZE>>,
         done_task: Arc<AtomicU64>,
-    ) -> Worker<T, O, RING_BUFFER_SIZE> {
+    ) -> Worker<T, J, O, RING_BUFFER_SIZE> {
         Self {
             _id: id,
             join_flag,
