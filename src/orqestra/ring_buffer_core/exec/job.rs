@@ -1,5 +1,6 @@
 use std::{
-    cell::RefCell,
+    cell::{Ref, RefCell},
+    ops::Deref,
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -24,6 +25,25 @@ where
     O: 'static,
 {
     pub(crate) vec: Vec<Arc<(RefCell<Option<O>>, AtomicBool)>>,
+}
+
+#[derive(Debug)]
+pub enum JobDepErr {
+    IndexOutOfBounds,
+    ValueIsnNotReady,
+}
+
+impl<O> JobDep<O>
+where
+    O: 'static,
+{
+    pub fn get(&self, idx: usize) -> Result<Ref<'_, Option<O>>, JobDepErr> {
+        if let Some(arc_value) = self.vec.get(idx) {
+            Ok(arc_value.0.borrow())
+        } else {
+            Err(JobDepErr::IndexOutOfBounds)
+        }
+    }
 }
 
 /// The `OrqestraJobTrait` trait allows any data type that implements
