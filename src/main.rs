@@ -8,8 +8,8 @@ impl OrqestraTaskTrait<()> for MyTask {
 }
 
 impl OrqestraJobTrait<()> for MyTask {
-    fn execute(&self) -> () {
-        println!("job execute! from {}", self.0);
+    fn execute(&self, job_dep: orqestra::JobDep<()>) -> () {
+        println!("job execute! {}", self.0);
     }
 }
 

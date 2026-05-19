@@ -19,6 +19,13 @@ where
     pub(crate) dep: RefCell<Vec<Arc<(RefCell<Option<O>>, AtomicBool)>>>,
 }
 
+pub struct JobDep<O>
+where
+    O: 'static,
+{
+    pub(crate) vec: Vec<Arc<(RefCell<Option<O>>, AtomicBool)>>,
+}
+
 /// The `OrqestraJobTrait` trait allows any data type that implements
 /// it to be a job that can be run by `Orqestra`
 pub trait OrqestraJobTrait<O>
@@ -26,7 +33,7 @@ where
     O: 'static,
 {
     /// the main function that will be executed by the Worker
-    fn execute(&self) -> O;
+    fn execute(&self, job_dep: JobDep<O>) -> O;
 }
 
 impl<J, O> InnerJob<J, O>
