@@ -136,6 +136,52 @@ where
             .try_enqueue(ExecutableTask::Task(WaitingTask::new(task)))
     }
 
+    /// Executes a Job that has been initialized from the Job struct
+    /// This method must be used on a Job that is the initialization of a graph schedule.
+    /// ```rust
+    /// fn main() {
+    ///     let orqestra: Orqestra<MyTask, MyJob, (), 64, 4> = Orqestra::new();
+    ///
+    ///     let job_1 = Job::new(MyJob(|_| {
+    ///         println!("job 1 done");
+    ///     }));
+    ///
+    ///     let job_2 = Job::new(MyJob(|_| {
+    ///         println!("job 2 done");
+    ///     }));
+    ///
+    ///     let job_3 = Job::new(MyJob(|dep| {
+    ///         println!("job 3 done");
+    ///     }))
+    ///     .after(&job_1)
+    ///     .after(&job_2);
+    ///
+    ///     orqestra.job_exec(job_1);
+    ///     orqestra.job_exec(job_2);
+    ///
+    ///     orqestra.join();
+    /// }
+    /// ```
+    ///
+    /// ```
+    /// The code above will create a graph like this
+    ///
+    ///  Job_1  Job_2
+    ///    \     /
+    ///     \   /
+    ///      \ /
+    ///     Job_3
+    /// ```
+    ///
+    /// Because job_1 and job_2 are the beginning/initial of the graph,
+    /// only job_1 and job_2 are executed using Orqestra::job_exec
+    /// ```rust
+    /// //...
+    /// orqestra.job_exec(job_1);
+    /// orqestra.job_exec(job_2);
+    /// //...
+    /// ```
+    ///
     pub fn job_exec(&self, job: Job<J, O>) {
         self.ring_buffer_core
             .enqueue(ExecutableTask::Job(job.inner));
