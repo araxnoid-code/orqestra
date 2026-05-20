@@ -30,12 +30,10 @@ impl<const RING_BUFFER_SIZE: usize, const WORKERS_SIZE: usize>
 {
     /// ExecuteCore initialization, Requires a generic Structure in the form of:
     ///
-    /// ExecuteCore::new<T, O>
+    /// ExecuteCore::new<T: OrqestraTaskTrait<O> + 'static, J:OrqestraJobTrait<O> + 'static, O: 'static>
     ///
-    /// T: implements OrqestraTaskTrait<O> + 'static
-    /// O: 'static
-    ///
-    /// T, functions for the type of data that will become a task
+    /// T, tipe data yang akan menjadi tugas
+    /// J, data type that will be the job
     /// O, functions for the output of spawned tasks/jobs
     ///
     /// will immediately spawn threads of the number of WORKERS_SIZE and store them as a thread pool

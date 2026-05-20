@@ -31,6 +31,10 @@ where
         }
     }
 
+    /// Every Job that is in `next_jobs` because it has been registered for scheduling will be processed.
+    ///
+    /// 1. exec_counter > 0, will not be included in the ring-buffer.
+    /// 2. exec_counter == 0, will be put into the ring-buffer.
     pub fn next_job<R>(&self, ring_buffer: &R)
     where
         R: RingBufferTrait<T, J, O>,

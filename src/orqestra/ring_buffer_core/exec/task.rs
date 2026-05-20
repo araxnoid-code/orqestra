@@ -23,6 +23,7 @@ where
     /// Stores data types that implement the OrchestratorTaskTrait.
     /// Serves as the main part in executing spawned tasks.
     pub(crate) f: T,
+
     /// as a data type that stores values that will be updated
     /// when the task has been executed by the worker
     /// `AtomicBool` functions to provide a sign whether the return_value already has a completed value.
@@ -34,7 +35,7 @@ where
     T: OrqestraTaskTrait<O>,
     O: 'static,
 {
-    /// create a WaitingTask
+    /// create a WaitingTask, accepts data types that implement OrqestraTaskTrait
     pub fn new(f: T) -> WaitingTask<T, O> {
         Self {
             f,

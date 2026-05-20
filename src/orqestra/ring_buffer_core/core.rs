@@ -30,6 +30,7 @@ where
 {
     /// when dequeuing to retrieve an Executable Task and succeeding at that time
     Ok(ExecutableTask<T, J, O>),
+
     /// When dequeuing to retrieve an ExecutableTask but getting no ExecutableTask,
     /// the Order will have the usize value as the index at the previously empty ExecutableTask location,
     /// useful for workers to periodically check the location at the index obtained until
@@ -47,6 +48,7 @@ where
 {
     /// serves to store ExecutableTask
     task: Option<ExecutableTask<T, J, O>>,
+
     /// serves to indicate whether the space is empty
     empty: AtomicBool,
 }

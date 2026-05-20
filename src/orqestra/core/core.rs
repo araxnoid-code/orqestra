@@ -13,7 +13,7 @@ use crate::{
 /// allocation into ring-buffers, managing workflows
 /// and synchronizing between ExecutableTask and worker management.
 /// ## 2 Main Core
-/// ### TaskCore
+/// ### RingBufferCore
 /// The part responsible for processing tasks and jobs, creating ExecutableTask,
 /// and managing the ring buffer. Adding(enqueue) and removing(dequeue) elements must be done
 /// through the Ring Buffer in the TaskCore structure.
@@ -45,6 +45,32 @@ where
 {
     /// initial requires manual initialization of the data type as
     /// task, job and size of the ring-buffer and the number of workers to spawn
+    /// ## initialization
+    /// requires Initialization of data types that implement `OrqestraTaskTrait` and `OrqestraJobTrait`.
+    /// requires size initialization for ring-buffer size and number of workers.
+    /// ```rust
+    /// // OrqestraTaskTrait
+    /// struct MyTask(fn() -> usize);
+    /// impl OrqestraTaskTrait<usize> for MyTask {
+    ///     fn execute(&self) -> usize {
+    ///         (self.0)()
+    ///     }
+    /// }
+    ///
+    /// // OrqestraJobTrait
+    /// struct MyJob(fn(JobDep<usize>) -> usize);
+    /// impl OrqestraJobTrait<usize> for MyJob {
+    ///     fn execute(&self, job_dep: JobDep<usize>) -> usize {
+    ///         (self.0)(job_dep)
+    ///     }
+    /// }
+    ///
+    /// fn main() {
+    ///    // Orqestra<T: OrqestraTaskTrait, J:OrqestraJobTrait, O: 'static, RING_BUFFER_SIZE, WORKERS_SIZE>
+    ///    let orqestra: Orqestra<MyTask, MyJob, usize, 64, 4> = Orqestra::new();
+    /// }
+    /// ```
+    /// ##
     pub fn new() -> Orqestra<T, J, O, RING_BUFFER_SIZE, WORKERS_SIZE> {
         let ring_buffer_core = Arc::new(RingBufferCore::new());
         let execute_core = ExecuteCore::new(ring_buffer_core.clone());
