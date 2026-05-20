@@ -1,3 +1,5 @@
+use std::{thread::sleep, time::Duration};
+
 use orqestra::{Job, JobDep, Orqestra, OrqestraJobTrait, OrqestraTaskTrait};
 
 struct MyTask(fn() -> ());
@@ -7,32 +9,43 @@ impl OrqestraTaskTrait<()> for MyTask {
     }
 }
 
-struct MyJob(fn(JobDep<()>) -> ());
+struct MyJob((fn(&Self, JobDep<()>) -> (), usize));
 impl OrqestraJobTrait<()> for MyJob {
     fn execute(&self, job_dep: JobDep<()>) -> () {
-        (self.0)(job_dep)
+        self.0.0(self, job_dep)
     }
 }
 
 fn main() {
-    let orqestra: Orqestra<MyTask, MyJob, (), 64, 4> = Orqestra::new();
+    let orqestra: Orqestra<MyTask, MyJob, (), 8, 1> = Orqestra::new();
 
-    let job_1 = Job::new(MyJob(|_| {
-        println!("job 1 done");
-    }));
+    let job = Job::new(MyJob((
+        |this, _| {
+            sleep(Duration::from_millis(2000));
+            println!("task {} done", this.0.1)
+        },
+        0,
+    )));
 
-    let job_2 = Job::new(MyJob(|_| {
-        println!("job 2 done");
-    }));
+    Job::new(MyJob((
+        |this, _| println!("chile task {} done", this.0.1),
+        8,
+    )))
+    .after(&job);
 
-    let job_3 = Job::new(MyJob(|dep| {
-        println!("job 3 done");
-    }))
-    .after(&job_1)
-    .after(&job_2);
+    orqestra.job_exec(job);
 
-    orqestra.job_exec(job_1);
-    orqestra.job_exec(job_2);
+    for i in 0..8 {
+        let job = Job::new(MyJob((
+            |this, _| {
+                sleep(Duration::from_millis(1000));
+                println!("task {} done", this.0.1)
+            },
+            i,
+        )));
+
+        orqestra.job_exec(job);
+    }
 
     orqestra.join();
 }

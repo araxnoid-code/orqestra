@@ -1,4 +1,4 @@
-use crate::{DequeueStatus, OrqestraJobTrait, OrqestraTaskTrait, RingBufferCore};
+use crate::{DequeueStatus, ExecutableTask, OrqestraJobTrait, OrqestraTaskTrait, RingBufferCore};
 use std::{
     sync::{
         Arc,
@@ -33,6 +33,7 @@ where
     /// save the obtained index in the ring-buffer,
     /// but there is still no ExecutableTask in that index
     order: Option<usize>,
+    // jobs: Vec<ExecutableTask<>>,
 }
 
 impl<T, J, O, const RING_BUFFER_SIZE: usize> Worker<T, J, O, RING_BUFFER_SIZE>

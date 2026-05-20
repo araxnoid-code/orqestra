@@ -42,7 +42,7 @@ where
         if let ExecutableTask::Job(job) = self {
             for job in job.next_jobs.take() {
                 if job.exec_counter.fetch_sub(1, Ordering::Relaxed) == 1 {
-                    ring_buffer.enqueue(Self::Job(job));
+                    ring_buffer.try_enqueue(Self::Job(job)).unwrap();
                 };
             }
         }

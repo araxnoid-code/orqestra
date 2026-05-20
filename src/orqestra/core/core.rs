@@ -181,7 +181,6 @@ where
     /// orqestra.job_exec(job_2);
     /// //...
     /// ```
-    ///
     pub fn job_exec(&self, job: Job<J, O>) {
         self.ring_buffer_core
             .enqueue(ExecutableTask::Job(job.inner));
