@@ -3,7 +3,7 @@ use std::{
     ops::Deref,
     process::id,
     ptr::null_mut,
-    sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering},
+    sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, AtomicUsize, Ordering},
     thread::yield_now,
 };
 
@@ -92,6 +92,9 @@ where
     /// a place to store tasks that is possible in multi producer and multi consumer
     /// because of the synchronization between indexes by head and tail and by `RingBufferSpace`
     queue: AtomicPtr<Vec<RingBufferSpace<T, J, O>>>,
+
+    ///
+    order: AtomicUsize,
 }
 
 impl<T, J, O, const RING_BUFFER_SIZE: usize> RingBufferCore<T, J, O, RING_BUFFER_SIZE>
@@ -115,6 +118,7 @@ where
                     .map(|_| RingBufferSpace::new())
                     .collect(),
             ))),
+            order: AtomicUsize::new(RING_BUFFER_SIZE),
         }
     }
 
@@ -158,15 +162,23 @@ where
         executable_task: ExecutableTask<T, J, O>,
     ) -> Result<(), &'static str> {
         self.in_task.fetch_add(1, Ordering::Relaxed);
-        let idx = self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
+
+        let order = self.order.load(Ordering::Relaxed);
+        let idx = if order < RING_BUFFER_SIZE {
+            order
+        } else {
+            self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1)
+        };
 
         unsafe {
             let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
             if !space.empty.load(Ordering::Relaxed) {
                 self.in_task.fetch_sub(1, Ordering::Relaxed);
+                self.order.store(idx, Ordering::Relaxed);
                 return Err("Cannot insert task because ring buffer is full");
             }
 
+            self.order.store(RING_BUFFER_SIZE, Ordering::Relaxed);
             space.task = Some(executable_task);
             space.empty.store(false, Ordering::Relaxed);
             Ok(())

@@ -93,7 +93,6 @@ where
             };
 
             let executable_task = if let (Some(idx), None) = (self.order, &saving_job) {
-                println!("polling in oerder {}", idx);
                 match self.ring_buffer.dequeue_via_order(idx) {
                     DequeueStatus::Ok(executable_task) => Some(executable_task),
                     DequeueStatus::Order(_) => None,
