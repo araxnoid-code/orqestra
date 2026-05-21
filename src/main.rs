@@ -21,21 +21,24 @@ fn main() {
 
     let job = Job::new(MyJob((
         |this, _| {
-            sleep(Duration::from_millis(2000));
+            sleep(Duration::from_millis(1000));
             println!("task {} done", this.0.1)
         },
         0,
     )));
 
     Job::new(MyJob((
-        |this, _| println!("chile task {} done", this.0.1),
-        8,
+        |this, _| {
+            sleep(Duration::from_millis(1000));
+            println!("chile task {} done", this.0.1)
+        },
+        100,
     )))
     .after(&job);
 
     orqestra.job_exec(job);
 
-    for i in 0..8 {
+    for i in 1..9 {
         let job = Job::new(MyJob((
             |this, _| {
                 sleep(Duration::from_millis(1000));

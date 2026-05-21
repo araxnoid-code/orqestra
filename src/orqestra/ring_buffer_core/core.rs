@@ -172,6 +172,25 @@ where
         }
     }
 
+    pub(crate) fn swap_enqueue(
+        &self,
+        executable_task: ExecutableTask<T, J, O>,
+    ) -> Option<ExecutableTask<T, J, O>> {
+        self.in_task.fetch_add(1, Ordering::Relaxed);
+        let idx = self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
+
+        unsafe {
+            let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
+            if !space.empty.load(Ordering::Relaxed) {
+                Some(space.task.replace(executable_task).unwrap())
+            } else {
+                space.task = Some(executable_task);
+                space.empty.store(false, Ordering::Relaxed);
+                None
+            }
+        }
+    }
+
     /// take ExecutableTask from ring buffer
     /// Retrieval is based on the index obtained via tail
     /// synchronization between workers based on the location index obtained via tail
@@ -181,6 +200,7 @@ where
     /// and will be checked periodically until a thread adds an ExecutableTask to that index.
     pub(crate) fn dequeue(&self) -> DequeueStatus<T, J, O> {
         let idx = self.tail.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
+
         unsafe {
             let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
             if space.empty.load(Ordering::Relaxed) {
@@ -232,6 +252,11 @@ where
 
     fn try_enqueue(&self, executable_task: ExecutableTask<T, J, O>) -> Result<(), &'static str>;
 
+    fn swap_enqueue(
+        &self,
+        executable_task: ExecutableTask<T, J, O>,
+    ) -> Option<ExecutableTask<T, J, O>>;
+
     fn dequeue(&self) -> DequeueStatus<T, J, O>;
 
     fn dequeue_via_order(&self, idx: usize) -> DequeueStatus<T, J, O>;
@@ -252,6 +277,13 @@ where
 
     fn try_enqueue(&self, executable_task: ExecutableTask<T, J, O>) -> Result<(), &'static str> {
         self.try_enqueue(executable_task)
+    }
+
+    fn swap_enqueue(
+        &self,
+        executable_task: ExecutableTask<T, J, O>,
+    ) -> Option<ExecutableTask<T, J, O>> {
+        self.swap_enqueue(executable_task)
     }
 
     fn dequeue(&self) -> DequeueStatus<T, J, O> {

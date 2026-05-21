@@ -1,5 +1,6 @@
 use crate::{DequeueStatus, ExecutableTask, OrqestraJobTrait, OrqestraTaskTrait, RingBufferCore};
 use std::{
+    collections::VecDeque,
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -33,7 +34,9 @@ where
     /// save the obtained index in the ring-buffer,
     /// but there is still no ExecutableTask in that index
     order: Option<usize>,
-    // jobs: Vec<ExecutableTask<>>,
+
+    ///
+    saving_jobs: VecDeque<ExecutableTask<T, J, O>>,
 }
 
 impl<T, J, O, const RING_BUFFER_SIZE: usize> Worker<T, J, O, RING_BUFFER_SIZE>
@@ -56,6 +59,7 @@ where
             ring_buffer,
             order: None,
             done_task,
+            saving_jobs: VecDeque::with_capacity(32),
         }
     }
 
@@ -82,11 +86,19 @@ where
                 break;
             }
 
-            let executable_task = if let Some(idx) = self.order {
+            let saving_job = if let Some(save_job) = self.saving_jobs.pop_front() {
+                self.ring_buffer.swap_enqueue(save_job)
+            } else {
+                None
+            };
+
+            let executable_task = if let (Some(idx), None) = (self.order, &saving_job) {
                 match self.ring_buffer.dequeue_via_order(idx) {
                     DequeueStatus::Ok(executable_task) => Some(executable_task),
                     DequeueStatus::Order(_) => None,
                 }
+            } else if let Some(executable_task) = saving_job {
+                Some(executable_task)
             } else {
                 match self.ring_buffer.dequeue() {
                     DequeueStatus::Ok(executable_task) => Some(executable_task),
@@ -101,7 +113,7 @@ where
                 self.break_counter = 0;
 
                 executable_task.execute_then_update();
-                executable_task.next_job(&*self.ring_buffer);
+                executable_task.next_job(&mut self.saving_jobs);
 
                 self.done_task.fetch_add(1, Ordering::Relaxed);
             } else {

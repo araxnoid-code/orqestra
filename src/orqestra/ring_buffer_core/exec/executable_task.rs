@@ -1,4 +1,7 @@
-use std::sync::{Arc, atomic::Ordering};
+use std::{
+    collections::VecDeque,
+    sync::{Arc, atomic::Ordering},
+};
 
 use crate::{InnerJob, JobDep, OrqestraJobTrait, OrqestraTaskTrait, RingBufferTrait, WaitingTask};
 
@@ -35,14 +38,11 @@ where
     ///
     /// 1. exec_counter > 0, will not be included in the ring-buffer.
     /// 2. exec_counter == 0, will be put into the ring-buffer.
-    pub fn next_job<R>(&self, ring_buffer: &R)
-    where
-        R: RingBufferTrait<T, J, O>,
-    {
+    pub fn next_job(&self, saving_jobs: &mut VecDeque<ExecutableTask<T, J, O>>) {
         if let ExecutableTask::Job(job) = self {
             for job in job.next_jobs.take() {
                 if job.exec_counter.fetch_sub(1, Ordering::Relaxed) == 1 {
-                    ring_buffer.try_enqueue(Self::Job(job)).unwrap();
+                    saving_jobs.push_back(Self::Job(job));
                 };
             }
         }
