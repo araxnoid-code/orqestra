@@ -52,6 +52,9 @@ where
 
     /// serves to indicate whether the space is empty
     empty: AtomicBool,
+
+    ///
+    process: AtomicBool,
 }
 impl<T, J, O> RingBufferSpace<T, J, O>
 where
@@ -64,6 +67,7 @@ where
         Self {
             task: None,
             empty: AtomicBool::new(true),
+            process: AtomicBool::new(false),
         }
     }
 }
@@ -131,7 +135,13 @@ where
     // until there is space to allocate an ExecutableTask.
     pub(crate) fn enqueue(&self, executable_task: ExecutableTask<T, J, O>) {
         self.in_task.fetch_add(1, Ordering::Relaxed);
-        let idx = self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
+
+        let order = self.order.swap(RING_BUFFER_SIZE, Ordering::Relaxed);
+        let idx = if order < RING_BUFFER_SIZE {
+            order
+        } else {
+            self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1)
+        };
 
         unsafe {
             let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
@@ -144,6 +154,10 @@ where
                 } else {
                     yield_counter += 1;
                 }
+            }
+
+            if order < RING_BUFFER_SIZE {
+                self.head.store((order as u64) + 1, Ordering::Relaxed);
             }
 
             space.task = Some(executable_task);
@@ -163,7 +177,7 @@ where
     ) -> Result<(), &'static str> {
         self.in_task.fetch_add(1, Ordering::Relaxed);
 
-        let order = self.order.load(Ordering::Relaxed);
+        let order = self.order.swap(RING_BUFFER_SIZE, Ordering::Relaxed);
         let idx = if order < RING_BUFFER_SIZE {
             order
         } else {
@@ -178,7 +192,10 @@ where
                 return Err("Cannot insert task because ring buffer is full");
             }
 
-            self.order.store(RING_BUFFER_SIZE, Ordering::Relaxed);
+            if order < RING_BUFFER_SIZE {
+                self.head.store((order as u64) + 1, Ordering::Relaxed);
+            }
+
             space.task = Some(executable_task);
             space.empty.store(false, Ordering::Relaxed);
             Ok(())
@@ -192,8 +209,16 @@ where
         self.in_task.fetch_add(1, Ordering::Relaxed);
         let idx = self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
 
+        println!("swap in index {}", idx);
+
         unsafe {
             let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
+            let process_status = space.process.swap(true, Ordering::Relaxed);
+
+            if process_status {
+                panic!("error! cause wan insert into index {}", idx);
+            }
+
             if !space.empty.load(Ordering::Relaxed) {
                 Some(space.task.replace(executable_task).unwrap())
             } else {
@@ -253,61 +278,61 @@ where
     }
 }
 
-/// The trait implemented by the structure that acts as a RingBuffer,
-/// provides methods to support the function as an ExecutableTask storage.
-pub(crate) trait RingBufferTrait<T, J, O>
-where
-    T: OrqestraTaskTrait<O> + 'static,
-    J: OrqestraJobTrait<O> + 'static,
-    O: 'static,
-{
-    fn enqueue(&self, executable_task: ExecutableTask<T, J, O>);
+// /// The trait implemented by the structure that acts as a RingBuffer,
+// /// provides methods to support the function as an ExecutableTask storage.
+// pub(crate) trait RingBufferTrait<T, J, O>
+// where
+//     T: OrqestraTaskTrait<O> + 'static,
+//     J: OrqestraJobTrait<O> + 'static,
+//     O: 'static,
+// {
+//     fn enqueue(&self, executable_task: ExecutableTask<T, J, O>);
 
-    fn try_enqueue(&self, executable_task: ExecutableTask<T, J, O>) -> Result<(), &'static str>;
+//     fn try_enqueue(&self, executable_task: ExecutableTask<T, J, O>) -> Result<(), &'static str>;
 
-    fn swap_enqueue(
-        &self,
-        executable_task: ExecutableTask<T, J, O>,
-    ) -> Option<ExecutableTask<T, J, O>>;
+//     fn swap_enqueue(
+//         &self,
+//         executable_task: ExecutableTask<T, J, O>,
+//     ) -> Option<ExecutableTask<T, J, O>>;
 
-    fn dequeue(&self) -> DequeueStatus<T, J, O>;
+//     fn dequeue(&self) -> DequeueStatus<T, J, O>;
 
-    fn dequeue_via_order(&self, idx: usize) -> DequeueStatus<T, J, O>;
+//     fn dequeue_via_order(&self, idx: usize) -> DequeueStatus<T, J, O>;
 
-    fn drop_queue(&self);
-}
+//     fn drop_queue(&self);
+// }
 
-impl<T, J, O, const RING_BUFFER_SIZE: usize> RingBufferTrait<T, J, O>
-    for RingBufferCore<T, J, O, RING_BUFFER_SIZE>
-where
-    T: OrqestraTaskTrait<O> + 'static,
-    J: OrqestraJobTrait<O> + 'static,
-    O: 'static,
-{
-    fn enqueue(&self, executable_task: ExecutableTask<T, J, O>) {
-        self.enqueue(executable_task);
-    }
+// impl<T, J, O, const RING_BUFFER_SIZE: usize> RingBufferTrait<T, J, O>
+//     for RingBufferCore<T, J, O, RING_BUFFER_SIZE>
+// where
+//     T: OrqestraTaskTrait<O> + 'static,
+//     J: OrqestraJobTrait<O> + 'static,
+//     O: 'static,
+// {
+//     fn enqueue(&self, executable_task: ExecutableTask<T, J, O>) {
+//         self.enqueue(executable_task);
+//     }
 
-    fn try_enqueue(&self, executable_task: ExecutableTask<T, J, O>) -> Result<(), &'static str> {
-        self.try_enqueue(executable_task)
-    }
+//     fn try_enqueue(&self, executable_task: ExecutableTask<T, J, O>) -> Result<(), &'static str> {
+//         self.try_enqueue(executable_task)
+//     }
 
-    fn swap_enqueue(
-        &self,
-        executable_task: ExecutableTask<T, J, O>,
-    ) -> Option<ExecutableTask<T, J, O>> {
-        self.swap_enqueue(executable_task)
-    }
+//     fn swap_enqueue(
+//         &self,
+//         executable_task: ExecutableTask<T, J, O>,
+//     ) -> Option<ExecutableTask<T, J, O>> {
+//         self.swap_enqueue(executable_task)
+//     }
 
-    fn dequeue(&self) -> DequeueStatus<T, J, O> {
-        self.dequeue()
-    }
+//     fn dequeue(&self) -> DequeueStatus<T, J, O> {
+//         self.dequeue()
+//     }
 
-    fn dequeue_via_order(&self, idx: usize) -> DequeueStatus<T, J, O> {
-        self.dequeue_via_order(idx)
-    }
+//     fn dequeue_via_order(&self, idx: usize) -> DequeueStatus<T, J, O> {
+//         self.dequeue_via_order(idx)
+//     }
 
-    fn drop_queue(&self) {
-        self.drop_queue();
-    }
-}
+//     fn drop_queue(&self) {
+//         self.drop_queue();
+//     }
+// }

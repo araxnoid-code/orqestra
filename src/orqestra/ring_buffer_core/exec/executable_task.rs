@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, atomic::Ordering},
 };
 
-use crate::{InnerJob, JobDep, OrqestraJobTrait, OrqestraTaskTrait, RingBufferTrait, WaitingTask};
+use crate::{InnerJob, JobDep, OrqestraJobTrait, OrqestraTaskTrait, WaitingTask};
 
 /// ExecutableTask functions to store Tasks and Jobs in one enum data type.
 /// useful for `Orqestra` to be able to process Task and job data types simultaneously.

@@ -17,34 +17,28 @@ impl OrqestraJobTrait<()> for MyJob {
 }
 
 fn main() {
-    //  |
-    // [0, 0, 0, 0, 0, 0, 0, 0]
-    //  |
-    //  p
+    let orqestra: Orqestra<MyTask, MyJob, (), 4, 2> = Orqestra::new();
 
-    let orqestra: Orqestra<MyTask, MyJob, (), 8, 1> = Orqestra::new();
+    for i in 0..5 {
+        let job = Job::new(MyJob((
+            |this, _| {
+                sleep(Duration::from_millis(1000));
+                println!("job {} done", this.0.1);
+            },
+            i,
+        )));
 
-    orqestra.spawn_task(MyTask(|| {
-        sleep(Duration::from_millis(1000));
-        println!("dummy done");
-    }));
+        Job::new(MyJob((
+            |this, _| {
+                sleep(Duration::from_millis(1000));
+                println!("inner job {} done", this.0.1);
+            },
+            i,
+        )))
+        .after(&job);
 
-    for i in 0..8 {
-        orqestra.spawn_task(MyTask(|| {
-            sleep(Duration::from_millis(1000));
-            println!("dummy done");
-        }));
+        orqestra.job_exec(job);
     }
-
-    let _ = orqestra.try_spawn_task(MyTask(|| {
-        println!("done 1");
-        sleep(Duration::from_millis(1000));
-    }));
-
-    let _ = orqestra.spawn_task(MyTask(|| {
-        println!("done 2");
-        sleep(Duration::from_millis(1000));
-    }));
 
     orqestra.join();
 }
