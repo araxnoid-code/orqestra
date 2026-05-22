@@ -1,9 +1,8 @@
 use std::{
     hint::spin_loop,
     ops::Deref,
-    process::id,
     ptr::null_mut,
-    sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, AtomicUsize, Ordering},
+    sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering},
     thread::yield_now,
 };
 
@@ -96,9 +95,6 @@ where
     /// a place to store tasks that is possible in multi producer and multi consumer
     /// because of the synchronization between indexes by head and tail and by `RingBufferSpace`
     queue: AtomicPtr<Vec<RingBufferSpace<T, J, O>>>,
-
-    ///
-    order: AtomicUsize,
 }
 
 impl<T, J, O, const RING_BUFFER_SIZE: usize> RingBufferCore<T, J, O, RING_BUFFER_SIZE>
@@ -122,7 +118,6 @@ where
                     .map(|_| RingBufferSpace::new())
                     .collect(),
             ))),
-            order: AtomicUsize::new(RING_BUFFER_SIZE),
         }
     }
 
@@ -136,12 +131,7 @@ where
     pub(crate) fn enqueue(&self, executable_task: ExecutableTask<T, J, O>) {
         self.in_task.fetch_add(1, Ordering::Relaxed);
 
-        let order = self.order.swap(RING_BUFFER_SIZE, Ordering::Relaxed);
-        let idx = if order < RING_BUFFER_SIZE {
-            order
-        } else {
-            self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1)
-        };
+        let idx = self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
 
         unsafe {
             let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
@@ -154,10 +144,6 @@ where
                 } else {
                     yield_counter += 1;
                 }
-            }
-
-            if order < RING_BUFFER_SIZE {
-                self.head.store((order as u64) + 1, Ordering::Relaxed);
             }
 
             space.task = Some(executable_task);
@@ -177,23 +163,13 @@ where
     ) -> Result<(), &'static str> {
         self.in_task.fetch_add(1, Ordering::Relaxed);
 
-        let order = self.order.swap(RING_BUFFER_SIZE, Ordering::Relaxed);
-        let idx = if order < RING_BUFFER_SIZE {
-            order
-        } else {
-            self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1)
-        };
+        let idx = self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
 
         unsafe {
             let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
             if !space.empty.load(Ordering::Relaxed) {
                 self.in_task.fetch_sub(1, Ordering::Relaxed);
-                self.order.store(idx, Ordering::Relaxed);
                 return Err("Cannot insert task because ring buffer is full");
-            }
-
-            if order < RING_BUFFER_SIZE {
-                self.head.store((order as u64) + 1, Ordering::Relaxed);
             }
 
             space.task = Some(executable_task);
@@ -209,15 +185,8 @@ where
         self.in_task.fetch_add(1, Ordering::Relaxed);
         let idx = self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
 
-        println!("swap in index {}", idx);
-
         unsafe {
             let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
-            let process_status = space.process.swap(true, Ordering::Relaxed);
-
-            if process_status {
-                panic!("error! cause wan insert into index {}", idx);
-            }
 
             if !space.empty.load(Ordering::Relaxed) {
                 Some(space.task.replace(executable_task).unwrap())
@@ -277,62 +246,3 @@ where
         }
     }
 }
-
-// /// The trait implemented by the structure that acts as a RingBuffer,
-// /// provides methods to support the function as an ExecutableTask storage.
-// pub(crate) trait RingBufferTrait<T, J, O>
-// where
-//     T: OrqestraTaskTrait<O> + 'static,
-//     J: OrqestraJobTrait<O> + 'static,
-//     O: 'static,
-// {
-//     fn enqueue(&self, executable_task: ExecutableTask<T, J, O>);
-
-//     fn try_enqueue(&self, executable_task: ExecutableTask<T, J, O>) -> Result<(), &'static str>;
-
-//     fn swap_enqueue(
-//         &self,
-//         executable_task: ExecutableTask<T, J, O>,
-//     ) -> Option<ExecutableTask<T, J, O>>;
-
-//     fn dequeue(&self) -> DequeueStatus<T, J, O>;
-
-//     fn dequeue_via_order(&self, idx: usize) -> DequeueStatus<T, J, O>;
-
-//     fn drop_queue(&self);
-// }
-
-// impl<T, J, O, const RING_BUFFER_SIZE: usize> RingBufferTrait<T, J, O>
-//     for RingBufferCore<T, J, O, RING_BUFFER_SIZE>
-// where
-//     T: OrqestraTaskTrait<O> + 'static,
-//     J: OrqestraJobTrait<O> + 'static,
-//     O: 'static,
-// {
-//     fn enqueue(&self, executable_task: ExecutableTask<T, J, O>) {
-//         self.enqueue(executable_task);
-//     }
-
-//     fn try_enqueue(&self, executable_task: ExecutableTask<T, J, O>) -> Result<(), &'static str> {
-//         self.try_enqueue(executable_task)
-//     }
-
-//     fn swap_enqueue(
-//         &self,
-//         executable_task: ExecutableTask<T, J, O>,
-//     ) -> Option<ExecutableTask<T, J, O>> {
-//         self.swap_enqueue(executable_task)
-//     }
-
-//     fn dequeue(&self) -> DequeueStatus<T, J, O> {
-//         self.dequeue()
-//     }
-
-//     fn dequeue_via_order(&self, idx: usize) -> DequeueStatus<T, J, O> {
-//         self.dequeue_via_order(idx)
-//     }
-
-//     fn drop_queue(&self) {
-//         self.drop_queue();
-//     }
-// }
