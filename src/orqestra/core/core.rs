@@ -105,7 +105,7 @@ where
     /// When the ring buffer is full, blocking will occur until there is space for the task that has been spawned.
     pub fn spawn_task(&self, task: T) {
         self.ring_buffer_core
-            .enqueue(ExecutableTask::Task(WaitingTask::new(task)));
+            .enqueue(ExecutableTask::new_task(task));
     }
 
     /// serves to spawn a task that will be executed by workers in Orqestra
@@ -133,7 +133,7 @@ where
     /// when the ring-buffer is full, it will give Result::Err.
     pub fn try_spawn_task(&self, task: T) -> Result<(), &str> {
         self.ring_buffer_core
-            .try_enqueue(ExecutableTask::Task(WaitingTask::new(task)))
+            .try_enqueue(ExecutableTask::new_task(task))
     }
 
     /// Executes a Job that has been initialized from the Job struct
@@ -182,8 +182,7 @@ where
     /// //...
     /// ```
     pub fn job_exec(&self, job: Job<J, O>) {
-        self.ring_buffer_core
-            .enqueue(ExecutableTask::Job(job.inner));
+        self.ring_buffer_core.enqueue(ExecutableTask::new_job(job));
     }
 
     /// At the end of the Orchestra flow, blocking will occur until all spawned

@@ -1,9 +1,47 @@
 use std::{
     collections::VecDeque,
-    sync::{Arc, atomic::Ordering},
+    ptr::{null, null_mut},
+    sync::{
+        Arc,
+        atomic::{AtomicPtr, Ordering},
+    },
 };
 
-use crate::{InnerJob, JobDep, OrqestraJobTrait, OrqestraTaskTrait, WaitingTask};
+use crate::{InnerJob, Job, JobDep, OrqestraJobTrait, OrqestraTaskTrait, WaitingTask};
+
+pub(crate) struct NextExecutable<T, J, O>(AtomicPtr<ExecutableTask<T, J, O>>)
+where
+    J: OrqestraJobTrait<O> + 'static,
+    T: OrqestraTaskTrait<O> + 'static,
+    O: 'static;
+
+impl<T, J, O> NextExecutable<T, J, O>
+where
+    J: OrqestraJobTrait<O> + 'static,
+    T: OrqestraTaskTrait<O> + 'static,
+    O: 'static,
+{
+    fn new() -> NextExecutable<T, J, O> {
+        Self(AtomicPtr::new(null_mut()))
+    }
+}
+
+pub(crate) struct PrevExecutable<T, J, O>(AtomicPtr<ExecutableTask<T, J, O>>)
+where
+    J: OrqestraJobTrait<O> + 'static,
+    T: OrqestraTaskTrait<O> + 'static,
+    O: 'static;
+
+impl<T, J, O> PrevExecutable<T, J, O>
+where
+    J: OrqestraJobTrait<O> + 'static,
+    T: OrqestraTaskTrait<O> + 'static,
+    O: 'static,
+{
+    fn new() -> PrevExecutable<T, J, O> {
+        Self(AtomicPtr::new(null_mut()))
+    }
+}
 
 /// ExecutableTask functions to store Tasks and Jobs in one enum data type.
 /// useful for `Orqestra` to be able to process Task and job data types simultaneously.
@@ -14,8 +52,20 @@ where
     O: 'static,
 {
     /// save the spawned Task
-    Task(WaitingTask<T, O>),
-    Job(Arc<InnerJob<J, O>>),
+    Task(
+        (
+            WaitingTask<T, O>,
+            NextExecutable<T, J, O>,
+            PrevExecutable<T, J, O>,
+        ),
+    ),
+    Job(
+        (
+            Arc<InnerJob<J, O>>,
+            NextExecutable<T, J, O>,
+            PrevExecutable<T, J, O>,
+        ),
+    ),
 }
 
 impl<J, T, O> ExecutableTask<T, J, O>
@@ -24,12 +74,32 @@ where
     T: OrqestraTaskTrait<O> + 'static,
     O: 'static,
 {
+    pub fn new_task(task: T) -> ExecutableTask<T, J, O> {
+        Self::Task((
+            WaitingTask::new(task),
+            NextExecutable::new(),
+            PrevExecutable::new(),
+        ))
+    }
+
+    pub fn new_job(job: Job<J, O>) -> ExecutableTask<T, J, O> {
+        Self::Job((
+            job.inner.clone(),
+            NextExecutable::new(),
+            PrevExecutable::new(),
+        ))
+    }
+
+    pub fn new_job_from_arc_inner(inner: Arc<InnerJob<J, O>>) -> ExecutableTask<T, J, O> {
+        Self::Job((inner, NextExecutable::new(), PrevExecutable::new()))
+    }
+
     /// execute ExecutableTask
     pub(crate) fn execute(&self) -> O {
         match self {
-            ExecutableTask::Task(task) => task.f.execute(),
-            ExecutableTask::Job(job) => job.f.execute(JobDep {
-                vec: job.dep.take(),
+            ExecutableTask::Task(task) => task.0.f.execute(),
+            ExecutableTask::Job(job) => job.0.f.execute(JobDep {
+                vec: job.0.dep.take(),
             }),
         }
     }
@@ -40,9 +110,9 @@ where
     /// 2. exec_counter == 0, will be put into the ring-buffer.
     pub fn next_job(&self, saving_jobs: &mut VecDeque<ExecutableTask<T, J, O>>) {
         if let ExecutableTask::Job(job) = self {
-            for job in job.next_jobs.take() {
+            for job in job.0.next_jobs.take() {
                 if job.exec_counter.fetch_sub(1, Ordering::Relaxed) == 1 {
-                    saving_jobs.push_back(Self::Job(job));
+                    saving_jobs.push_back(Self::new_job_from_arc_inner(job));
                 };
             }
         }
@@ -52,12 +122,12 @@ where
     pub(crate) fn update_value(&self, value: O) {
         match self {
             ExecutableTask::Task(task) => {
-                task.return_value.0.replace(Some(value));
-                task.return_value.1.store(true, Ordering::Relaxed);
+                task.0.return_value.0.replace(Some(value));
+                task.0.return_value.1.store(true, Ordering::Relaxed);
             }
             ExecutableTask::Job(job) => {
-                job.return_value.0.replace(Some(value));
-                job.return_value.1.store(true, Ordering::Relaxed);
+                job.0.return_value.0.replace(Some(value));
+                job.0.return_value.1.store(true, Ordering::Relaxed);
             }
         };
     }
@@ -65,5 +135,14 @@ where
     /// execute ExecuteTask and save the value of the execution result
     pub(crate) fn execute_then_update(&self) {
         self.update_value(self.execute());
+    }
+
+    ///
+    pub(crate) fn next() -> AtomicPtr<ExecutableTask<T, J, O>> {
+        AtomicPtr::new(null_mut())
+    }
+
+    pub(crate) fn prev() -> AtomicPtr<ExecutableTask<T, J, O>> {
+        AtomicPtr::new(null_mut())
     }
 }
