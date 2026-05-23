@@ -6,7 +6,7 @@ use std::{
     thread::yield_now,
 };
 
-use crate::{ExecutableTask, OrqestraJobTrait, OrqestraTaskTrait};
+use crate::{ExecutableTask, OrqestraJobTrait, OrqestraTaskTrait, SecondaryList};
 
 /// counter, as a wrapper of AtomicU64.
 #[repr(align(64))]
@@ -51,9 +51,6 @@ where
 
     /// serves to indicate whether the space is empty
     empty: AtomicBool,
-
-    ///
-    process: AtomicBool,
 }
 impl<T, J, O> RingBufferSpace<T, J, O>
 where
@@ -66,7 +63,6 @@ where
         Self {
             task: None,
             empty: AtomicBool::new(true),
-            process: AtomicBool::new(false),
         }
     }
 }
@@ -95,6 +91,9 @@ where
     /// a place to store tasks that is possible in multi producer and multi consumer
     /// because of the synchronization between indexes by head and tail and by `RingBufferSpace`
     queue: AtomicPtr<Vec<RingBufferSpace<T, J, O>>>,
+
+    /// secondary_list
+    secondary_list: SecondaryList<T, J, O>,
 }
 
 impl<T, J, O, const RING_BUFFER_SIZE: usize> RingBufferCore<T, J, O, RING_BUFFER_SIZE>
@@ -110,14 +109,18 @@ where
             head: Counter {
                 idx: AtomicU64::new(0),
             },
+
             tail: Counter {
                 idx: AtomicU64::new(0),
             },
+
             queue: AtomicPtr::new(Box::into_raw(Box::new(
                 (0..RING_BUFFER_SIZE)
                     .map(|_| RingBufferSpace::new())
                     .collect(),
             ))),
+
+            secondary_list: SecondaryList::new(),
         }
     }
 
