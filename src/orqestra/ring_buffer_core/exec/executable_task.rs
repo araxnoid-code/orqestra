@@ -1,5 +1,6 @@
 use std::{
     collections::VecDeque,
+    ops::Deref,
     ptr::{null, null_mut},
     sync::{
         Arc,
@@ -53,18 +54,14 @@ where
 {
     /// save the spawned Task
     Task(
-        (
-            WaitingTask<T, O>,
-            NextExecutable<T, J, O>,
-            PrevExecutable<T, J, O>,
-        ),
+        WaitingTask<T, O>,
+        NextExecutable<T, J, O>,
+        PrevExecutable<T, J, O>,
     ),
     Job(
-        (
-            Arc<InnerJob<J, O>>,
-            NextExecutable<T, J, O>,
-            PrevExecutable<T, J, O>,
-        ),
+        Arc<InnerJob<J, O>>,
+        NextExecutable<T, J, O>,
+        PrevExecutable<T, J, O>,
     ),
 }
 
@@ -75,31 +72,31 @@ where
     O: 'static,
 {
     pub fn new_task(task: T) -> ExecutableTask<T, J, O> {
-        Self::Task((
+        Self::Task(
             WaitingTask::new(task),
             NextExecutable::new(),
             PrevExecutable::new(),
-        ))
+        )
     }
 
     pub fn new_job(job: Job<J, O>) -> ExecutableTask<T, J, O> {
-        Self::Job((
+        Self::Job(
             job.inner.clone(),
             NextExecutable::new(),
             PrevExecutable::new(),
-        ))
+        )
     }
 
     pub fn new_job_from_arc_inner(inner: Arc<InnerJob<J, O>>) -> ExecutableTask<T, J, O> {
-        Self::Job((inner, NextExecutable::new(), PrevExecutable::new()))
+        Self::Job(inner, NextExecutable::new(), PrevExecutable::new())
     }
 
     /// execute ExecutableTask
     pub(crate) fn execute(&self) -> O {
         match self {
-            ExecutableTask::Task(task) => task.0.f.execute(),
-            ExecutableTask::Job(job) => job.0.f.execute(JobDep {
-                vec: job.0.dep.take(),
+            ExecutableTask::Task(task, _, _) => task.f.execute(),
+            ExecutableTask::Job(job, _, _) => job.f.execute(JobDep {
+                vec: job.dep.take(),
             }),
         }
     }
@@ -109,8 +106,8 @@ where
     /// 1. exec_counter > 0, will not be included in the ring-buffer.
     /// 2. exec_counter == 0, will be put into the ring-buffer.
     pub fn next_job(&self, saving_jobs: &mut VecDeque<ExecutableTask<T, J, O>>) {
-        if let ExecutableTask::Job(job) = self {
-            for job in job.0.next_jobs.take() {
+        if let ExecutableTask::Job(job, _, _) = self {
+            for job in job.next_jobs.take() {
                 if job.exec_counter.fetch_sub(1, Ordering::Relaxed) == 1 {
                     saving_jobs.push_back(Self::new_job_from_arc_inner(job));
                 };
@@ -121,13 +118,13 @@ where
     /// update return_value based on parameter value
     pub(crate) fn update_value(&self, value: O) {
         match self {
-            ExecutableTask::Task(task) => {
-                task.0.return_value.0.replace(Some(value));
-                task.0.return_value.1.store(true, Ordering::Relaxed);
+            ExecutableTask::Task(task, _, _) => {
+                task.return_value.0.replace(Some(value));
+                task.return_value.1.store(true, Ordering::Relaxed);
             }
-            ExecutableTask::Job(job) => {
-                job.0.return_value.0.replace(Some(value));
-                job.0.return_value.1.store(true, Ordering::Relaxed);
+            ExecutableTask::Job(job, _, _) => {
+                job.return_value.0.replace(Some(value));
+                job.return_value.1.store(true, Ordering::Relaxed);
             }
         };
     }
@@ -138,11 +135,18 @@ where
     }
 
     ///
-    pub(crate) fn next() -> AtomicPtr<ExecutableTask<T, J, O>> {
-        AtomicPtr::new(null_mut())
+    pub(crate) fn next(&self) -> &AtomicPtr<ExecutableTask<T, J, O>> {
+        match self {
+            ExecutableTask::Task(_, next, _) => &next.0,
+            ExecutableTask::Job(_, next, _) => &next.0,
+        }
     }
 
-    pub(crate) fn prev() -> AtomicPtr<ExecutableTask<T, J, O>> {
-        AtomicPtr::new(null_mut())
+    ///
+    pub(crate) fn prev(&self) -> &AtomicPtr<ExecutableTask<T, J, O>> {
+        match self {
+            ExecutableTask::Task(_, _, prev) => &prev.0,
+            ExecutableTask::Job(_, _, prev) => &prev.0,
+        }
     }
 }

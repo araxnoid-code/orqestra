@@ -6,8 +6,6 @@ use std::{
     },
 };
 
-use crate::ExecutableTask;
-
 /// The `OrqestraTaskTrait` trait allows any data type that implements
 /// it to be a task that can be executed by the `Orqestra`.
 pub trait OrqestraTaskTrait<O>
