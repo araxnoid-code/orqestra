@@ -93,8 +93,9 @@ where
     /// a place to store tasks that is possible in multi producer and multi consumer
     /// because of the synchronization between indexes by head and tail and by `RingBufferSpace`
     queue: AtomicPtr<Vec<RingBufferSpace<T, J, O>>>,
+
     // secondary_list
-    // pub(crate) secondary_list: SegQueue<ExecutableTask<T, J, O>>,
+    pub(crate) secondary_list: SegQueue<ExecutableTask<T, J, O>>,
 }
 
 impl<T, J, O, const RING_BUFFER_SIZE: usize> RingBufferCore<T, J, O, RING_BUFFER_SIZE>
@@ -120,7 +121,8 @@ where
                     .map(|_| RingBufferSpace::new())
                     .collect(),
             ))),
-            // secondary_list: SegQueue::new(),
+
+            secondary_list: SegQueue::new(),
         }
     }
 
@@ -240,9 +242,9 @@ where
         }
     }
 
-    pub(crate) fn secondary_push_front(&self, executable_task: ExecutableTask<T, J, O>) {
+    pub(crate) fn secondary_push(&self, executable_task: ExecutableTask<T, J, O>) {
         self.in_task.fetch_add(1, Ordering::Relaxed);
-        // self.secondary_list.push(executable_task);
+        self.secondary_list.push(executable_task);
     }
 
     /// drop queue

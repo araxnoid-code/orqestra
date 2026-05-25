@@ -57,7 +57,6 @@ impl<const RING_BUFFER_SIZE: usize, const WORKERS_SIZE: usize>
             let ring_buffer_clone = ring_buffer.clone();
             let join_flag_clone = join_flag.clone();
             let done_task_clone = done_task.clone();
-            let queue_clone = queueu.clone();
 
             thread::spawn(move || {
                 Worker::new(id, join_flag_clone, ring_buffer_clone, done_task_clone).running();

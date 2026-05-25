@@ -185,6 +185,12 @@ where
         self.ring_buffer_core.enqueue(ExecutableTask::new_job(job));
     }
 
+    ///
+    pub fn secondary_spawn(&self, task: T) {
+        self.ring_buffer_core
+            .secondary_push(ExecutableTask::new_task(task));
+    }
+
     /// At the end of the Orchestra flow, blocking will occur until all spawned
     /// tasks and jobs are completed and cleanup is carried out.
     pub fn join(self) {
@@ -208,11 +214,5 @@ where
         }
 
         self.ring_buffer_core.drop_queue();
-    }
-
-    ///
-    pub fn secondary_spawn(&self, task: T) {
-        self.ring_buffer_core
-            .secondary_push_front(ExecutableTask::new_task(task));
     }
 }

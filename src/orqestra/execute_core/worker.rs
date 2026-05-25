@@ -97,8 +97,7 @@ where
             };
 
             let secondary_list = if self.toggle {
-                // self.ring_buffer.secondary_list.pop()
-                None
+                self.ring_buffer.secondary_list.pop()
             } else {
                 self.toggle = false;
                 None
