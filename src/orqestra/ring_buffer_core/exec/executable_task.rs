@@ -84,9 +84,7 @@ where
     pub(crate) fn execute(&self) -> O {
         match self {
             ExecutableTask::Task(task, _) => task.f.execute(),
-            ExecutableTask::Job(job, _) => job.f.execute(JobDep {
-                vec: job.dep.take(),
-            }),
+            ExecutableTask::Job(job, _) => job.f.execute({ JobDep { vec: &job.dep } }),
             ExecutableTask::Dummy(_) => panic!("Error, dummy cannot be executed"),
         }
     }
@@ -97,9 +95,9 @@ where
     /// 2. exec_counter == 0, will be put into the ring-buffer.
     pub fn next_job(&self, saving_jobs: &mut VecDeque<ExecutableTask<T, J, O>>) {
         if let ExecutableTask::Job(job, _) = self {
-            for job in job.next_jobs.take() {
+            for job in job.next_jobs.lock().unwrap().iter() {
                 if job.exec_counter.fetch_sub(1, Ordering::Relaxed) == 1 {
-                    saving_jobs.push_back(Self::new_job_from_arc_inner(job));
+                    saving_jobs.push_back(Self::new_job_from_arc_inner((*job).clone()));
                 };
             }
         }
@@ -109,11 +107,11 @@ where
     pub(crate) fn update_value(&self, value: O) {
         match self {
             ExecutableTask::Task(task, _) => {
-                task.return_value.0.replace(Some(value));
+                *task.return_value.0.lock().unwrap() = Some(value);
                 task.return_value.1.store(true, Ordering::Relaxed);
             }
             ExecutableTask::Job(job, _) => {
-                job.return_value.0.replace(Some(value));
+                *job.return_value.0.lock().unwrap() = Some(value);
                 job.return_value.1.store(true, Ordering::Relaxed);
             }
             ExecutableTask::Dummy(_) => (),

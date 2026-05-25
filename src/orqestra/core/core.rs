@@ -22,9 +22,9 @@ use crate::{
 /// has a Thread Pool where each thread will access the ring-buffer simultaneously.
 pub struct Orqestra<T, J, O, const RING_BUFFER_SIZE: usize, const WORKERS_SIZE: usize>
 where
-    T: OrqestraTaskTrait<O> + 'static,
-    J: OrqestraJobTrait<O> + 'static,
-    O: 'static,
+    T: OrqestraTaskTrait<O> + 'static + Send,
+    J: OrqestraJobTrait<O> + 'static + Send + Sync,
+    O: 'static + Send,
 {
     /// The part responsible for processing tasks and jobs, creating ExecutableTask,
     /// and managing the ring buffer. Adding(enqueue) and removing(dequeue) elements must be done
@@ -39,9 +39,9 @@ where
 impl<T, J, O, const RING_BUFFER_SIZE: usize, const WORKERS_SIZE: usize>
     Orqestra<T, J, O, RING_BUFFER_SIZE, WORKERS_SIZE>
 where
-    J: OrqestraJobTrait<O> + 'static,
-    T: OrqestraTaskTrait<O>,
-    O: 'static,
+    T: OrqestraTaskTrait<O> + 'static + Send,
+    J: OrqestraJobTrait<O> + 'static + Send + Sync,
+    O: 'static + Send,
 {
     /// initial requires manual initialization of the data type as
     /// task, job and size of the ring-buffer and the number of workers to spawn

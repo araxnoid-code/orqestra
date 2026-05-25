@@ -1,7 +1,7 @@
 use std::{
     cell::{Ref, RefCell},
     sync::{
-        Arc,
+        Arc, Mutex, MutexGuard,
         atomic::{AtomicBool, AtomicUsize, Ordering},
     },
 };
@@ -61,13 +61,13 @@ where
     pub(crate) f: J,
 
     /// Saving values after a Job is executed
-    pub(crate) return_value: Arc<(RefCell<Option<O>>, AtomicBool)>,
+    pub(crate) return_value: Arc<(Mutex<Option<O>>, AtomicBool)>,
 
     /// Saves another Job to be executed after this Job is executed
-    pub(crate) next_jobs: RefCell<Vec<Arc<InnerJob<J, O>>>>,
+    pub(crate) next_jobs: Mutex<Vec<Arc<InnerJob<J, O>>>>,
 
     /// Stores the value of the Job that is a dependency
-    pub(crate) dep: RefCell<Vec<Arc<(RefCell<Option<O>>, AtomicBool)>>>,
+    pub(crate) dep: Mutex<Vec<Arc<(Mutex<Option<O>>, AtomicBool)>>>,
 }
 
 impl<J, O> InnerJob<J, O>
@@ -80,9 +80,9 @@ where
         InnerJob {
             exec_counter: AtomicUsize::new(0),
             f,
-            return_value: Arc::new((RefCell::new(None), AtomicBool::new(false))),
-            next_jobs: RefCell::new(Vec::with_capacity(4)),
-            dep: RefCell::new(Vec::with_capacity(4)),
+            return_value: Arc::new((Mutex::new(None), AtomicBool::new(false))),
+            next_jobs: Mutex::new(Vec::with_capacity(4)),
+            dep: Mutex::new(Vec::with_capacity(4)),
         }
     }
 }
@@ -168,10 +168,11 @@ where
         self.inner.exec_counter.fetch_add(1, Ordering::Relaxed);
         self.inner
             .dep
-            .borrow_mut()
+            .lock()
+            .unwrap()
             .push(job.inner.return_value.clone());
 
-        job.inner.next_jobs.borrow_mut().push(self.inner.clone());
+        job.inner.next_jobs.lock().unwrap().push(self.inner.clone());
         self
     }
 }
@@ -184,14 +185,14 @@ pub enum JobDepErr {
 }
 
 /// a useful structure for wrapping dependency values obtained after scheduling a job
-pub struct JobDep<O>
+pub struct JobDep<'a, O>
 where
     O: 'static,
 {
-    pub(crate) vec: Vec<Arc<(RefCell<Option<O>>, AtomicBool)>>,
+    pub(crate) vec: &'a Mutex<Vec<Arc<(Mutex<Option<O>>, AtomicBool)>>>,
 }
 
-impl<O> JobDep<O>
+impl<'a, O> JobDep<'a, O>
 where
     O: 'static,
 {
@@ -231,11 +232,12 @@ where
     ///     orqestra.join();
     /// }
     /// ```
-    pub fn get(&self, idx: usize) -> Result<Ref<'_, Option<O>>, JobDepErr> {
-        if let Some(arc_value) = self.vec.get(idx) {
-            Ok(arc_value.0.borrow())
+    pub fn get(&self, idx: usize) -> Result<MutexGuard<'_, Option<O>>, JobDepErr> {
+        if let Some(arc_value) = self.vec.lock().unwrap().get(idx) {
+            // Ok(arc_value.0.lock().unwrap())
         } else {
-            Err(JobDepErr::IndexOutOfBounds)
+            // Err(JobDepErr::IndexOutOfBounds)
         }
+        panic!()
     }
 }

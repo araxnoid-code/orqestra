@@ -7,7 +7,12 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use crate::{OrqestraJobTrait, OrqestraTaskTrait, RingBufferCore, orqestra::execute_core::Worker};
+use crossbeam_queue::SegQueue;
+
+use crate::{
+    ExecutableTask, OrqestraJobTrait, OrqestraTaskTrait, RingBufferCore,
+    orqestra::execute_core::Worker,
+};
 
 /// The part that functions as the task executor in the ring-buffer,
 /// has a Thread Pool where each thread will access the ring-buffer simultaneously.
@@ -41,9 +46,9 @@ impl<const RING_BUFFER_SIZE: usize, const WORKERS_SIZE: usize>
         ring_buffer: Arc<RingBufferCore<T, J, O, RING_BUFFER_SIZE>>,
     ) -> ExecuteCore<RING_BUFFER_SIZE, WORKERS_SIZE>
     where
-        T: OrqestraTaskTrait<O> + 'static,
-        J: OrqestraJobTrait<O> + 'static,
-        O: 'static,
+        T: OrqestraTaskTrait<O> + 'static + Send,
+        J: OrqestraJobTrait<O> + 'static + Send + Sync,
+        O: 'static + Send,
     {
         let join_flag = Arc::new(AtomicBool::new(false));
         let done_task = Arc::new(AtomicU64::new(0));
@@ -52,6 +57,8 @@ impl<const RING_BUFFER_SIZE: usize, const WORKERS_SIZE: usize>
             let ring_buffer_clone = ring_buffer.clone();
             let join_flag_clone = join_flag.clone();
             let done_task_clone = done_task.clone();
+            let queue_clone = queueu.clone();
+
             thread::spawn(move || {
                 Worker::new(id, join_flag_clone, ring_buffer_clone, done_task_clone).running();
             })

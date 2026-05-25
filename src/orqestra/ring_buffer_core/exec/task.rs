@@ -1,7 +1,7 @@
 use std::{
     cell::RefCell,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, AtomicPtr},
     },
 };
@@ -30,7 +30,7 @@ where
     /// as a data type that stores values that will be updated
     /// when the task has been executed by the worker
     /// `AtomicBool` functions to provide a sign whether the return_value already has a completed value.
-    pub(crate) return_value: Arc<(RefCell<Option<O>>, AtomicBool)>,
+    pub(crate) return_value: Arc<(Mutex<Option<O>>, AtomicBool)>,
 }
 
 impl<T, O> WaitingTask<T, O>
@@ -42,7 +42,7 @@ where
     pub fn new(f: T) -> WaitingTask<T, O> {
         Self {
             f,
-            return_value: Arc::new((RefCell::new(None), AtomicBool::new(false))),
+            return_value: Arc::new((Mutex::new(None), AtomicBool::new(false))),
         }
     }
 }

@@ -97,10 +97,8 @@ where
             };
 
             let secondary_list = if self.toggle {
-                self.ring_buffer
-                    .secondary_list
-                    .pop_back()
-                    .map(|box_task| *box_task)
+                // self.ring_buffer.secondary_list.pop()
+                None
             } else {
                 self.toggle = false;
                 None
