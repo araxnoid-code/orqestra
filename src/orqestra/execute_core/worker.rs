@@ -91,13 +91,15 @@ where
             }
 
             let saving_job = if let Some(save_job) = self.saving_jobs.pop_front() {
-                self.ring_buffer.swap_enqueue(save_job)
+                self.ring_buffer.swap_enqueue(save_job);
+                None
             } else {
                 None
             };
 
             let secondary_list = if self.toggle {
-                self.ring_buffer.secondary_list.pop()
+                // self.ring_buffer.secondary_list.pop()
+                None
             } else {
                 self.toggle = false;
                 None

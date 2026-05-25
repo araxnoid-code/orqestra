@@ -108,33 +108,33 @@ where
             .enqueue(ExecutableTask::new_task(task));
     }
 
-    /// serves to spawn a task that will be executed by workers in Orqestra
-    /// accepts data types that already implement the `OrqestraTaskTrait` trait
-    /// ```rust
-    /// use orqestra::{Orqestra, OrqestraTaskTrait};
-    ///
-    /// struct MyTask;
-    /// impl OrqestraTaskTrait<()> for MyTask {
-    ///     fn execute(&self) -> () {
-    ///         println!("execute!");
-    ///     }
-    /// }
-    ///
-    /// fn main() {
-    ///     let orqestra: Orqestra<MyTask, _, 32, 4> = Orqestra::new();
-    ///
-    ///     orqestra.try_spawn_task(MyTask).unwrap();
-    ///     orqestra.try_spawn_task(MyTask).unwrap();
-    ///
-    ///     orqestra.join();
-    /// }
-    /// ```
-    /// ## non Blocking
-    /// when the ring-buffer is full, it will give Result::Err.
-    pub fn try_spawn_task(&self, task: T) -> Result<(), &str> {
-        self.ring_buffer_core
-            .try_enqueue(ExecutableTask::new_task(task))
-    }
+    // /// serves to spawn a task that will be executed by workers in Orqestra
+    // /// accepts data types that already implement the `OrqestraTaskTrait` trait
+    // /// ```rust
+    // /// use orqestra::{Orqestra, OrqestraTaskTrait};
+    // ///
+    // /// struct MyTask;
+    // /// impl OrqestraTaskTrait<()> for MyTask {
+    // ///     fn execute(&self) -> () {
+    // ///         println!("execute!");
+    // ///     }
+    // /// }
+    // ///
+    // /// fn main() {
+    // ///     let orqestra: Orqestra<MyTask, _, 32, 4> = Orqestra::new();
+    // ///
+    // ///     orqestra.try_spawn_task(MyTask).unwrap();
+    // ///     orqestra.try_spawn_task(MyTask).unwrap();
+    // ///
+    // ///     orqestra.join();
+    // /// }
+    // /// ```
+    // /// ## non Blocking
+    // /// when the ring-buffer is full, it will give Result::Err.
+    // pub fn try_spawn_task(&self, task: T) -> Result<(), &str> {
+    //     self.ring_buffer_core
+    //         .try_enqueue(ExecutableTask::new_task(task))
+    // }
 
     /// Executes a Job that has been initialized from the Job struct
     /// This method must be used on a Job that is the initialization of a graph schedule.
@@ -214,5 +214,9 @@ where
         }
 
         self.ring_buffer_core.drop_queue();
+    }
+
+    pub fn get_ring_buffer_core(&self) -> &RingBufferCore<T, J, O, RING_BUFFER_SIZE> {
+        &*self.ring_buffer_core
     }
 }

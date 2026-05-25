@@ -2,7 +2,7 @@ use std::{
     hint::spin_loop,
     ops::Deref,
     ptr::null_mut,
-    sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering},
+    sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, AtomicUsize, Ordering},
     thread::yield_now,
 };
 
@@ -94,7 +94,10 @@ where
     /// because of the synchronization between indexes by head and tail and by `RingBufferSpace`
     queue: AtomicPtr<Vec<RingBufferSpace<T, J, O>>>,
 
-    // secondary_list
+    /// registered
+    pub registered: AtomicUsize,
+
+    /// secondary_list
     pub(crate) secondary_list: SegQueue<ExecutableTask<T, J, O>>,
 }
 
@@ -122,6 +125,8 @@ where
                     .collect(),
             ))),
 
+            registered: AtomicUsize::new(0),
+
             secondary_list: SegQueue::new(),
         }
     }
@@ -136,8 +141,11 @@ where
     pub(crate) fn enqueue(&self, executable_task: ExecutableTask<T, J, O>) {
         self.in_task.fetch_add(1, Ordering::Relaxed);
 
-        let idx = self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
+        // if self.registered.load(Ordering::Acquire) >= RING_BUFFER_SIZE {
+        //     return;
+        // };
 
+        let idx = self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
         unsafe {
             let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
 
@@ -152,36 +160,37 @@ where
             }
 
             space.task = Some(executable_task);
+            self.registered.fetch_add(1, Ordering::Release);
             space.empty.store(false, Ordering::Relaxed);
         }
     }
 
-    /// put ExecutableTask into ring-buffer
-    /// insert data based on the index obtained by the head in the ring buffer,
-    /// synchronize with workers based on the index location and the empty property
-    /// in the RingBufferSpace which is where the executable task is stored
-    /// ## non-Blocking
-    /// When the ring-buffer is full, it will return the data type Result::Err
-    pub(crate) fn try_enqueue(
-        &self,
-        executable_task: ExecutableTask<T, J, O>,
-    ) -> Result<(), &'static str> {
-        self.in_task.fetch_add(1, Ordering::Relaxed);
+    // /// put ExecutableTask into ring-buffer
+    // /// insert data based on the index obtained by the head in the ring buffer,
+    // /// synchronize with workers based on the index location and the empty property
+    // /// in the RingBufferSpace which is where the executable task is stored
+    // /// ## non-Blocking
+    // /// When the ring-buffer is full, it will return the data type Result::Err
+    // pub(crate) fn try_enqueue(
+    //     &self,
+    //     executable_task: ExecutableTask<T, J, O>,
+    // ) -> Result<(), &'static str> {
+    //     self.in_task.fetch_add(1, Ordering::Relaxed);
 
-        let idx = self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
+    //     let idx = self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
 
-        unsafe {
-            let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
-            if !space.empty.load(Ordering::Relaxed) {
-                self.in_task.fetch_sub(1, Ordering::Relaxed);
-                return Err("Cannot insert task because ring buffer is full");
-            }
+    //     unsafe {
+    //         let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
+    //         if !space.empty.load(Ordering::Relaxed) {
+    //             self.in_task.fetch_sub(1, Ordering::Relaxed);
+    //             return Err("Cannot insert task because ring buffer is full");
+    //         }
 
-            space.task = Some(executable_task);
-            space.empty.store(false, Ordering::Relaxed);
-            Ok(())
-        }
-    }
+    //         space.task = Some(executable_task);
+    //         space.empty.store(false, Ordering::Relaxed);
+    //         Ok(())
+    //     }
+    // }
 
     pub(crate) fn swap_enqueue(
         &self,
@@ -220,6 +229,7 @@ where
             }
 
             let executable_task = space.task.take().unwrap();
+            self.registered.fetch_sub(1, Ordering::Release);
             space.empty.store(true, Ordering::Relaxed);
 
             return DequeueStatus::Ok(executable_task);
@@ -242,6 +252,7 @@ where
         }
     }
 
+    ///
     pub(crate) fn secondary_push(&self, executable_task: ExecutableTask<T, J, O>) {
         self.in_task.fetch_add(1, Ordering::Relaxed);
         self.secondary_list.push(executable_task);

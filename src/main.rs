@@ -17,13 +17,26 @@ impl OrqestraJobTrait<()> for MyJob {
 }
 
 fn main() {
-    let orqestra: Orqestra<MyTask, MyJob, (), 4, 2> = Orqestra::new();
+    let orqestra: Orqestra<MyTask, MyJob, (), 1024, 16> = Orqestra::new();
+    let ring_buffer = orqestra.get_ring_buffer_core();
 
-    for i in 0..4 {
-        orqestra.secondary_spawn(MyTask(|| {
-            sleep(Duration::from_millis(1000));
+    for i in 0..1000 {
+        orqestra.spawn_task(MyTask(|| {
+            sleep(Duration::from_millis(500));
             println!("done");
         }));
+    }
+
+    loop {
+        // let counter = ring_buffer
+        //     .registered
+        //     .load(std::sync::atomic::Ordering::Acquire);
+
+        // println!("registered: {}", counter);
+
+        // if counter == 0 {
+        //     break;
+        // }
     }
 
     orqestra.join();
