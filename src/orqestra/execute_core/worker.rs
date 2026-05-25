@@ -98,8 +98,7 @@ where
             };
 
             let secondary_list = if self.toggle {
-                // self.ring_buffer.secondary_list.pop()
-                None
+                self.ring_buffer.secondary_list.pop()
             } else {
                 self.toggle = false;
                 None
@@ -126,6 +125,8 @@ where
 
             if let Some(executable_task) = executable_task {
                 self.break_counter = 0;
+
+                println!("thread executing somethong {}", self._id);
                 executable_task.execute_then_update();
                 executable_task.next_job(&mut self.saving_jobs);
 
