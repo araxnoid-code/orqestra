@@ -93,7 +93,7 @@ where
     queue: AtomicPtr<Vec<RingBufferSpace<T, J, O>>>,
 
     /// secondary_list
-    secondary_list: SecondaryList<T, J, O>,
+    pub secondary_list: SecondaryList<T, J, O>,
 }
 
 impl<T, J, O, const RING_BUFFER_SIZE: usize> RingBufferCore<T, J, O, RING_BUFFER_SIZE>

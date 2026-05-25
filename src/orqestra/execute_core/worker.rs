@@ -37,6 +37,9 @@ where
 
     ///
     saving_jobs: VecDeque<ExecutableTask<T, J, O>>,
+
+    ///
+    toggle: bool,
 }
 
 impl<T, J, O, const RING_BUFFER_SIZE: usize> Worker<T, J, O, RING_BUFFER_SIZE>
@@ -60,6 +63,7 @@ where
             order: None,
             done_task,
             saving_jobs: VecDeque::with_capacity(32),
+            toggle: false,
         }
     }
 
@@ -92,7 +96,19 @@ where
                 None
             };
 
-            let executable_task = if let (Some(idx), None) = (self.order, &saving_job) {
+            let secondary_list = if self.toggle {
+                self.ring_buffer
+                    .secondary_list
+                    .pop_back()
+                    .map(|box_task| *box_task)
+            } else {
+                self.toggle = false;
+                None
+            };
+
+            let executable_task = if let Some(executable_task) = secondary_list {
+                Some(executable_task)
+            } else if let (Some(idx), None) = (self.order, &saving_job) {
                 match self.ring_buffer.dequeue_via_order(idx) {
                     DequeueStatus::Ok(executable_task) => Some(executable_task),
                     DequeueStatus::Order(_) => None,
@@ -115,6 +131,7 @@ where
                 executable_task.next_job(&mut self.saving_jobs);
 
                 self.done_task.fetch_add(1, Ordering::Relaxed);
+                self.toggle = false;
             } else {
                 if self.break_counter < 500 {
                     yield_now();
@@ -123,6 +140,7 @@ where
                     continue;
                 }
                 self.break_counter += 1;
+                self.toggle = true;
             }
         }
     }
