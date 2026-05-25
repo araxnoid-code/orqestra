@@ -93,7 +93,7 @@ where
     queue: AtomicPtr<Vec<RingBufferSpace<T, J, O>>>,
 
     /// secondary_list
-    pub secondary_list: SecondaryList<T, J, O>,
+    pub(crate) secondary_list: SecondaryList<T, J, O>,
 }
 
 impl<T, J, O, const RING_BUFFER_SIZE: usize> RingBufferCore<T, J, O, RING_BUFFER_SIZE>
@@ -238,6 +238,11 @@ where
 
             return DequeueStatus::Ok(executable_task);
         }
+    }
+
+    pub(crate) fn secondary_push_front(&self, executable_task: ExecutableTask<T, J, O>) {
+        self.in_task.fetch_add(1, Ordering::Relaxed);
+        self.secondary_list.push_front(executable_task)
     }
 
     /// drop queue

@@ -209,4 +209,10 @@ where
 
         self.ring_buffer_core.drop_queue();
     }
+
+    ///
+    pub fn secondary_spawn(&self, task: T) {
+        self.ring_buffer_core
+            .secondary_push_front(ExecutableTask::new_task(task));
+    }
 }
