@@ -8,7 +8,7 @@ use std::{
 
 use crossbeam_queue::SegQueue;
 
-use crate::{ExecutableTask, OrqestraJobTrait, OrqestraTaskTrait, SecondaryList};
+use crate::{ExecutableTask, OrqestraJobTrait, OrqestraTaskTrait};
 
 /// counter, as a wrapper of AtomicU64.
 #[repr(align(64))]
