@@ -94,10 +94,13 @@ where
     /// because of the synchronization between indexes by head and tail and by `RingBufferSpace`
     queue: AtomicPtr<Vec<RingBufferSpace<T, J, O>>>,
 
-    /// registered
+    /// the status of the ring-buffer being full or not is based on the `registered_count` property
+    /// which will count the executables allocated using enqueue and deallocated using dequeue
     pub registered_count: AtomicUsize,
 
-    /// secondary_list
+    /// When the ring buffer is full, the executable task will be allocated to the secondary_list.
+    /// The secondary_list is dynamic and has no specific limitations in storing executable tasks
+    /// other than the available memory size.
     pub(crate) secondary_list: SegQueue<ExecutableTask<T, J, O>>,
 }
 
