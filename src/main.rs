@@ -18,20 +18,6 @@ impl OrqestraJobTrait<()> for MyJob {
 
 fn main() {
     let orqestra: Orqestra<MyTask, MyJob, (), 64, 16> = Orqestra::new();
-    let ring_buffer = orqestra.get_ring_buffer_core();
-    let exec_core = orqestra.get_execute_core();
-
-    for i in 0..1024 {
-        orqestra.spawn_task(MyTask(
-            |idx| {
-                sleep(Duration::from_millis(500));
-                // println!("task {} done", idx);
-            },
-            i,
-        ));
-    }
-
-    println!("done");
 
     orqestra.join();
 }
