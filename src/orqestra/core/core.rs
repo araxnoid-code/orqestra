@@ -198,6 +198,12 @@ where
         while self.execute_core.done_task.load(Ordering::Relaxed)
             < self.ring_buffer_core.in_task.load(Ordering::Relaxed)
         {
+            println!(
+                "{}/{}",
+                self.execute_core.done_task.load(Ordering::Relaxed),
+                self.ring_buffer_core.in_task.load(Ordering::Relaxed)
+            );
+
             if counter < 500 {
                 yield_now();
             } else {
@@ -218,5 +224,9 @@ where
 
     pub fn get_ring_buffer_core(&self) -> &RingBufferCore<T, J, O, RING_BUFFER_SIZE> {
         &*self.ring_buffer_core
+    }
+
+    pub fn get_execute_core(&self) -> &ExecuteCore<RING_BUFFER_SIZE, WORKERS_SIZE> {
+        &self.execute_core
     }
 }

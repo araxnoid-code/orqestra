@@ -139,12 +139,13 @@ where
     // When the ring buffer is full, blocking will occur
     // until there is space to allocate an ExecutableTask.
     pub(crate) fn enqueue(&self, executable_task: ExecutableTask<T, J, O>) {
+        if self.registered.fetch_add(1, Ordering::Release) >= RING_BUFFER_SIZE {
+            self.registered.fetch_sub(1, Ordering::Release);
+            self.secondary_push(executable_task);
+            return;
+        };
+
         self.in_task.fetch_add(1, Ordering::Relaxed);
-
-        // if self.registered.load(Ordering::Acquire) >= RING_BUFFER_SIZE {
-        //     return;
-        // };
-
         let idx = self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
         unsafe {
             let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
@@ -160,7 +161,6 @@ where
             }
 
             space.task = Some(executable_task);
-            self.registered.fetch_add(1, Ordering::Release);
             space.empty.store(false, Ordering::Relaxed);
         }
     }
@@ -206,6 +206,7 @@ where
                 Some(space.task.replace(executable_task).unwrap())
             } else {
                 space.task = Some(executable_task);
+                self.registered.fetch_add(1, Ordering::Release);
                 space.empty.store(false, Ordering::Relaxed);
                 None
             }
@@ -246,6 +247,7 @@ where
             }
 
             let executable_task = space.task.take().unwrap();
+            self.registered.fetch_sub(1, Ordering::Release);
             space.empty.store(true, Ordering::Relaxed);
 
             return DequeueStatus::Ok(executable_task);

@@ -1,4 +1,4 @@
-use std::{thread::sleep, time::Duration};
+use std::{sync::atomic::Ordering, thread::sleep, time::Duration};
 
 use orqestra::{Job, JobDep, Orqestra, OrqestraJobTrait, OrqestraTaskTrait};
 
@@ -17,10 +17,11 @@ impl OrqestraJobTrait<()> for MyJob {
 }
 
 fn main() {
-    let orqestra: Orqestra<MyTask, MyJob, (), 1024, 16> = Orqestra::new();
+    let orqestra: Orqestra<MyTask, MyJob, (), 64, 16> = Orqestra::new();
     let ring_buffer = orqestra.get_ring_buffer_core();
+    let exec_core = orqestra.get_execute_core();
 
-    for i in 0..1000 {
+    for i in 0..1024 {
         orqestra.spawn_task(MyTask(
             |idx| {
                 sleep(Duration::from_millis(500));
@@ -30,17 +31,7 @@ fn main() {
         ));
     }
 
-    loop {
-        // let counter = ring_buffer
-        //     .registered
-        //     .load(std::sync::atomic::Ordering::Acquire);
-
-        // println!("registered: {}", counter);
-
-        // if counter == 0 {
-        //     break;
-        // }
-    }
+    println!("done");
 
     orqestra.join();
 }

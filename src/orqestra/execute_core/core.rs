@@ -21,7 +21,7 @@ use crate::{
 /// manual initialization is required for WORKERS_SIZE
 pub struct ExecuteCore<const RING_BUFFER_SIZE: usize, const WORKERS_SIZE: usize> {
     /// to count how many tasks have been completed
-    pub(crate) done_task: Arc<AtomicU64>,
+    pub done_task: Arc<AtomicU64>,
 
     /// serves to provide a signal to end the iteration
     pub(crate) join_flag: Arc<AtomicBool>,

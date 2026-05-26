@@ -98,6 +98,7 @@ where
             };
 
             let secondary_list = if self.toggle {
+                // println!("worker get secondary");
                 self.ring_buffer.secondary_list.pop()
             } else {
                 self.toggle = false;
