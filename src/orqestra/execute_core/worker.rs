@@ -108,7 +108,10 @@ where
                 Some(executable_task)
             } else if let (Some(idx), None) = (self.order, &saving_job) {
                 match self.ring_buffer.dequeue_via_order(idx) {
-                    DequeueStatus::Ok(executable_task) => Some(executable_task),
+                    DequeueStatus::Ok(executable_task) => {
+                        self.order = None;
+                        Some(executable_task)
+                    }
                     DequeueStatus::Order(_) => None,
                 }
             } else if let Some(executable_task) = saving_job {
@@ -126,7 +129,6 @@ where
             if let Some(executable_task) = executable_task {
                 self.break_counter = 0;
 
-                println!("thread executing somethong {}", self._id);
                 executable_task.execute_then_update();
                 executable_task.next_job(&mut self.saving_jobs);
 

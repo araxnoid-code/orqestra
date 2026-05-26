@@ -2,10 +2,10 @@ use std::{thread::sleep, time::Duration};
 
 use orqestra::{Job, JobDep, Orqestra, OrqestraJobTrait, OrqestraTaskTrait};
 
-struct MyTask(fn() -> ());
+struct MyTask(fn(usize) -> (), usize);
 impl OrqestraTaskTrait<()> for MyTask {
     fn execute(&self) -> () {
-        (self.0)()
+        (self.0)(self.1)
     }
 }
 
@@ -21,10 +21,13 @@ fn main() {
     let ring_buffer = orqestra.get_ring_buffer_core();
 
     for i in 0..1000 {
-        orqestra.spawn_task(MyTask(|| {
-            sleep(Duration::from_millis(500));
-            println!("done");
-        }));
+        orqestra.spawn_task(MyTask(
+            |idx| {
+                sleep(Duration::from_millis(500));
+                // println!("task {} done", idx);
+            },
+            i,
+        ));
     }
 
     loop {
