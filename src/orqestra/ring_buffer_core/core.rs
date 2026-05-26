@@ -95,7 +95,7 @@ where
     queue: AtomicPtr<Vec<RingBufferSpace<T, J, O>>>,
 
     /// registered
-    pub registered: AtomicUsize,
+    pub registered_count: AtomicUsize,
 
     /// secondary_list
     pub(crate) secondary_list: SegQueue<ExecutableTask<T, J, O>>,
@@ -125,7 +125,7 @@ where
                     .collect(),
             ))),
 
-            registered: AtomicUsize::new(0),
+            registered_count: AtomicUsize::new(0),
 
             secondary_list: SegQueue::new(),
         }
@@ -135,12 +135,26 @@ where
     /// insert data based on the index obtained by the head in the ring buffer,
     /// synchronize with workers based on the index location and the empty property
     /// in the RingBufferSpace which is where the executable task is stored
-    /// ## Blocking
-    // When the ring buffer is full, blocking will occur
-    // until there is space to allocate an ExecutableTask.
+    ///
+    /// ## ring-buffer and secondary_list
+    /// In storing executable tasks, there are 2 allocation methods:
+    /// ### ring-buffer
+    /// is the main storage in the form of a queue,
+    /// allocation uses the ring-buffer concept via `head` and `tail` ring-buffer has a static size and can be full,
+    /// the status of the ring-buffer being full or not is based on the `registered_count` property
+    /// which will count the executables allocated using enqueue and deallocated using dequeue
+    /// ### secondary_list
+    /// When the ring buffer is full, the executable task will be allocated to the secondary_list.
+    /// The secondary_list is dynamic and has no specific limitations in storing executable tasks
+    /// other than the available memory size.
+    /// *version/0.0.1 and so on*
+    /// secondary_list usage in this version uses `crossbeam_queue::SegQueue`
+    /// *warning*
+    /// Because secondary_list is dynamic,
+    /// it can cause memory problems if there are too many executable tasks.
     pub(crate) fn enqueue(&self, executable_task: ExecutableTask<T, J, O>) {
-        if self.registered.fetch_add(1, Ordering::Release) >= RING_BUFFER_SIZE {
-            self.registered.fetch_sub(1, Ordering::Release);
+        if self.registered_count.fetch_add(1, Ordering::Release) >= RING_BUFFER_SIZE {
+            self.registered_count.fetch_sub(1, Ordering::Release);
             self.secondary_push(executable_task);
             return;
         };
@@ -165,34 +179,55 @@ where
         }
     }
 
-    // /// put ExecutableTask into ring-buffer
-    // /// insert data based on the index obtained by the head in the ring buffer,
-    // /// synchronize with workers based on the index location and the empty property
-    // /// in the RingBufferSpace which is where the executable task is stored
-    // /// ## non-Blocking
-    // /// When the ring-buffer is full, it will return the data type Result::Err
-    // pub(crate) fn try_enqueue(
-    //     &self,
-    //     executable_task: ExecutableTask<T, J, O>,
-    // ) -> Result<(), &'static str> {
-    //     self.in_task.fetch_add(1, Ordering::Relaxed);
+    /// put ExecutableTask into ring-buffer
+    /// insert data based on the index obtained by the head in the ring buffer,
+    /// synchronize with workers based on the index location and the empty property
+    /// in the RingBufferSpace which is where the executable task is stored
+    /// ## ring-buffer only
+    /// The allocation of executable tasks is only focused on the ring buffer,
+    /// if the ring buffer is full it will give an Err.
+    /// the status of the ring-buffer being full or not is based on the `registered_count` property
+    /// which will count the executables allocated using enqueue and deallocated using dequeue
+    pub(crate) fn try_enqueue(
+        &self,
+        executable_task: ExecutableTask<T, J, O>,
+    ) -> Result<(), &'static str> {
+        if self.registered_count.fetch_add(1, Ordering::Release) >= RING_BUFFER_SIZE {
+            self.registered_count.fetch_sub(1, Ordering::Release);
+            return Err("Cannot insert task because ring buffer is full");
+        };
 
-    //     let idx = self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
+        self.in_task.fetch_add(1, Ordering::Relaxed);
+        let idx = self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
+        unsafe {
+            let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
 
-    //     unsafe {
-    //         let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
-    //         if !space.empty.load(Ordering::Relaxed) {
-    //             self.in_task.fetch_sub(1, Ordering::Relaxed);
-    //             return Err("Cannot insert task because ring buffer is full");
-    //         }
+            let mut yield_counter = 0;
+            while !space.empty.load(Ordering::Relaxed) {
+                spin_loop();
+                if yield_counter >= 1000 {
+                    yield_now();
+                } else {
+                    yield_counter += 1;
+                }
+            }
 
-    //         space.task = Some(executable_task);
-    //         space.empty.store(false, Ordering::Relaxed);
-    //         Ok(())
-    //     }
-    // }
+            space.task = Some(executable_task);
+            space.empty.store(false, Ordering::Relaxed);
 
-    pub(crate) fn swap_enqueue(
+            Ok(())
+        }
+    }
+
+    /// registering executable tasks in the ring-buffer without any problems due to the static size of the ring-buffer.
+    /// ## there is empty space
+    /// If you get an index that points to empty space,
+    /// then that space will be immediately occupied to insert the executable task.
+    /// ## there is no empty space
+    /// If you get an index that points to a non-empty space,
+    /// then the executable task that occupies that space will be swapped with the executable task you want to insert,
+    /// the result of the swapped executable task will be the return value.
+    pub(crate) fn enqueue_or_swap(
         &self,
         executable_task: ExecutableTask<T, J, O>,
     ) -> Option<ExecutableTask<T, J, O>> {
@@ -206,11 +241,17 @@ where
                 Some(space.task.replace(executable_task).unwrap())
             } else {
                 space.task = Some(executable_task);
-                self.registered.fetch_add(1, Ordering::Release);
+                self.registered_count.fetch_add(1, Ordering::Release);
                 space.empty.store(false, Ordering::Relaxed);
                 None
             }
         }
+    }
+
+    /// langsung memasukkan executable task ke dalam secondary_list
+    pub(crate) fn secondary_push(&self, executable_task: ExecutableTask<T, J, O>) {
+        self.in_task.fetch_add(1, Ordering::Relaxed);
+        self.secondary_list.push(executable_task);
     }
 
     /// take ExecutableTask from ring buffer
@@ -230,7 +271,7 @@ where
             }
 
             let executable_task = space.task.take().unwrap();
-            self.registered.fetch_sub(1, Ordering::Release);
+            self.registered_count.fetch_sub(1, Ordering::Release);
             space.empty.store(true, Ordering::Relaxed);
 
             return DequeueStatus::Ok(executable_task);
@@ -247,17 +288,11 @@ where
             }
 
             let executable_task = space.task.take().unwrap();
-            self.registered.fetch_sub(1, Ordering::Release);
+            self.registered_count.fetch_sub(1, Ordering::Release);
             space.empty.store(true, Ordering::Relaxed);
 
             return DequeueStatus::Ok(executable_task);
         }
-    }
-
-    ///
-    pub(crate) fn secondary_push(&self, executable_task: ExecutableTask<T, J, O>) {
-        self.in_task.fetch_add(1, Ordering::Relaxed);
-        self.secondary_list.push(executable_task);
     }
 
     /// drop queue
