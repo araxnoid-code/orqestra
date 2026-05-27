@@ -1,23 +1,23 @@
-use std::{sync::atomic::Ordering, thread::sleep, time::Duration};
-
-use orqestra::{Job, JobDep, Orqestra, OrqestraJobTrait, OrqestraTaskTrait};
-
-struct MyTask(fn(usize) -> (), usize);
+use orqestra::{JobDep, Orqestra, OrqestraJobTrait, OrqestraTaskTrait};
+struct MyTask;
 impl OrqestraTaskTrait<()> for MyTask {
     fn execute(&self) -> () {
-        (self.0)(self.1)
+        println!("execute!");
     }
 }
 
-struct MyJob((fn(&Self, JobDep<()>) -> (), usize));
+struct MyJob(fn(JobDep<()>) -> ());
 impl OrqestraJobTrait<()> for MyJob {
     fn execute(&self, job_dep: JobDep<()>) -> () {
-        self.0.0(self, job_dep)
+        (self.0)(job_dep)
     }
 }
 
 fn main() {
-    let orqestra: Orqestra<MyTask, MyJob, (), 64, 16> = Orqestra::new();
+    let orqestra: Orqestra<MyTask, MyJob, _, 32, 4> = Orqestra::new();
+
+    orqestra.secondary_spawn_task(MyTask);
+    orqestra.secondary_spawn_task(MyTask);
 
     orqestra.join();
 }

@@ -83,8 +83,7 @@ where
     /// serves to spawn a task that will be executed by workers in Orqestra
     /// accepts data types that already implement the `OrqestraTaskTrait` trait
     /// ```rust
-    /// use orqestra::{Orqestra, OrqestraTaskTrait};
-    ///
+    /// use orqestra::{JobDep, Orqestra, OrqestraJobTrait, OrqestraTaskTrait};
     /// struct MyTask;
     /// impl OrqestraTaskTrait<()> for MyTask {
     ///     fn execute(&self) -> () {
@@ -92,17 +91,36 @@ where
     ///     }
     /// }
     ///
+    /// struct MyJob(fn(JobDep<()>) -> ());
+    /// impl OrqestraJobTrait<()> for MyJob {
+    ///     fn execute(&self, job_dep: JobDep<()>) -> () {
+    ///         (self.0)(job_dep)
+    ///     }
+    /// }
+    ///
     /// fn main() {
-    ///     let orqestra: Orqestra<MyTask, _, 32, 4> = Orqestra::new();
-    ///
+    ///     let orqestra: Orqestra<MyTask, MyJob, (), 32, 4> = Orqestra::new();
     ///     orqestra.spawn_task(MyTask);
     ///     orqestra.spawn_task(MyTask);
-    ///
     ///     orqestra.join();
     /// }
     /// ```
-    /// ## Blocking
-    /// When the ring buffer is full, blocking will occur until there is space for the task that has been spawned.
+    /// ## ring-buffer and secondary_list
+    /// In storing executable tasks, there are 2 allocation methods:
+    /// ### ring-buffer
+    /// is the main storage in the form of a queue,
+    /// allocation uses the ring-buffer concept via `head` and `tail` ring-buffer has a static size and can be full,
+    /// the status of the ring-buffer being full or not is based on the `registered_count` property
+    /// which will count the executables allocated using enqueue and deallocated using dequeue
+    /// ### secondary_list
+    /// When the ring buffer is full, the executable task will be allocated to the secondary_list.
+    /// The secondary_list is dynamic and has no specific limitations in storing executable tasks
+    /// other than the available memory size.
+    /// *version/0.0.1 and so on*
+    /// secondary_list usage in this version uses `crossbeam_queue::SegQueue`
+    /// *warning*
+    /// Because secondary_list is dynamic,
+    /// it can cause memory problems if there are too many executable tasks.
     pub fn spawn_task(&self, task: T) {
         self.ring_buffer_core
             .enqueue(ExecutableTask::new_task(task));
@@ -111,8 +129,7 @@ where
     /// serves to spawn a task that will be executed by workers in Orqestra
     /// accepts data types that already implement the `OrqestraTaskTrait` trait
     /// ```rust
-    /// use orqestra::{Orqestra, OrqestraTaskTrait};
-    ///
+    /// use orqestra::{JobDep, Orqestra, OrqestraJobTrait, OrqestraTaskTrait};
     /// struct MyTask;
     /// impl OrqestraTaskTrait<()> for MyTask {
     ///     fn execute(&self) -> () {
@@ -120,8 +137,15 @@ where
     ///     }
     /// }
     ///
+    /// struct MyJob(fn(JobDep<()>) -> ());
+    /// impl OrqestraJobTrait<()> for MyJob {
+    ///     fn execute(&self, job_dep: JobDep<()>) -> () {
+    ///         (self.0)(job_dep)
+    ///     }
+    /// }
+    ///
     /// fn main() {
-    ///     let orqestra: Orqestra<MyTask, _, 32, 4> = Orqestra::new();
+    ///     let orqestra: Orqestra<MyTask, MyJob, _, 32, 4> = Orqestra::new();
     ///
     ///     orqestra.try_spawn_task(MyTask).unwrap();
     ///     orqestra.try_spawn_task(MyTask).unwrap();
@@ -129,8 +153,11 @@ where
     ///     orqestra.join();
     /// }
     /// ```
-    /// ## non Blocking
-    /// when the ring-buffer is full, it will give Result::Err.
+    /// ## ring-buffer only
+    /// The allocation of executable tasks is only focused on the ring buffer,
+    /// if the ring buffer is full it will give an Err.
+    /// the status of the ring-buffer being full or not is based on the `registered_count` property
+    /// which will count the executables allocated using enqueue and deallocated using dequeue
     pub fn try_spawn_task(&self, task: T) -> Result<(), &str> {
         self.ring_buffer_core
             .try_enqueue(ExecutableTask::new_task(task))
@@ -185,8 +212,37 @@ where
         self.ring_buffer_core.enqueue(ExecutableTask::new_job(job));
     }
 
+    /// serves to spawn a task that will be executed by workers in Orqestra
+    /// accepts data types that already implement the `OrqestraTaskTrait` trait.
+    /// directly insert the executable task into the secondary_list.
+    /// The secondary_list is dynamic and has no specific limitations in storing executable tasks
+    /// other than the available memory size.
+    /// ```rust
+    /// use orqestra::{JobDep, Orqestra, OrqestraJobTrait, OrqestraTaskTrait};
+    /// struct MyTask;
+    /// impl OrqestraTaskTrait<()> for MyTask {
+    ///     fn execute(&self) -> () {
+    ///         println!("execute!");
+    ///     }
+    /// }
     ///
-    pub fn secondary_spawn(&self, task: T) {
+    /// struct MyJob(fn(JobDep<()>) -> ());
+    /// impl OrqestraJobTrait<()> for MyJob {
+    ///     fn execute(&self, job_dep: JobDep<()>) -> () {
+    ///         (self.0)(job_dep)
+    ///     }
+    /// }
+    ///
+    /// fn main() {
+    ///     let orqestra: Orqestra<MyTask, MyJob, _, 32, 4> = Orqestra::new();
+    ///
+    ///     orqestra.secondary_spawn_task(MyTask);
+    ///     orqestra.secondary_spawn_task(MyTask);
+    ///
+    ///     orqestra.join();
+    /// }
+    /// ```
+    pub fn secondary_spawn_task(&self, task: T) {
         self.ring_buffer_core
             .secondary_push(ExecutableTask::new_task(task));
     }

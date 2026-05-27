@@ -186,6 +186,7 @@ where
     /// insert data based on the index obtained by the head in the ring buffer,
     /// synchronize with workers based on the index location and the empty property
     /// in the RingBufferSpace which is where the executable task is stored
+    ///
     /// ## ring-buffer only
     /// The allocation of executable tasks is only focused on the ring buffer,
     /// if the ring buffer is full it will give an Err.
@@ -251,7 +252,7 @@ where
         }
     }
 
-    /// langsung memasukkan executable task ke dalam secondary_list
+    /// directly insert the executable task into the secondary_list
     pub(crate) fn secondary_push(&self, executable_task: ExecutableTask<T, J, O>) {
         self.in_task.fetch_add(1, Ordering::Relaxed);
         self.secondary_list.push(executable_task);
