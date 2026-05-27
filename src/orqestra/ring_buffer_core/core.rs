@@ -53,6 +53,9 @@ where
 
     /// serves to indicate whether the space is empty
     empty: AtomicBool,
+
+    ///
+    worker_process: AtomicBool,
 }
 impl<T, J, O> RingBufferSpace<T, J, O>
 where
@@ -65,6 +68,7 @@ where
         Self {
             task: None,
             empty: AtomicBool::new(true),
+            worker_process: AtomicBool::new(false),
         }
     }
 }
@@ -241,13 +245,27 @@ where
         unsafe {
             let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
 
-            if !space.empty.load(Ordering::Relaxed) {
-                Some(space.task.replace(executable_task).unwrap())
-            } else {
+            if space.empty.load(Ordering::Relaxed) {
+                // enqueue
                 space.task = Some(executable_task);
                 self.registered_count.fetch_add(1, Ordering::Release);
                 space.empty.store(false, Ordering::Relaxed);
                 None
+            } else {
+                // swap
+                if space.worker_process.swap(true, Ordering::Relaxed) {
+                    while space.worker_process.load(Ordering::Relaxed) {
+                        spin_loop();
+                    }
+
+                    // enqueue
+                    space.task = Some(executable_task);
+                    self.registered_count.fetch_add(1, Ordering::Release);
+                    space.empty.store(false, Ordering::Relaxed);
+                    return None;
+                }
+
+                Some(space.task.replace(executable_task).unwrap())
             }
         }
     }
@@ -274,9 +292,15 @@ where
                 return DequeueStatus::Order(idx);
             }
 
+            while space.worker_process.swap(true, Ordering::Relaxed) {
+                spin_loop();
+            }
+
             let executable_task = space.task.take().unwrap();
+
             self.registered_count.fetch_sub(1, Ordering::Release);
             space.empty.store(true, Ordering::Relaxed);
+            space.worker_process.store(false, Ordering::Relaxed);
 
             return DequeueStatus::Ok(executable_task);
         }
@@ -291,9 +315,15 @@ where
                 return DequeueStatus::Order(idx);
             }
 
+            while space.worker_process.swap(true, Ordering::Relaxed) {
+                spin_loop();
+            }
+
             let executable_task = space.task.take().unwrap();
+
             self.registered_count.fetch_sub(1, Ordering::Release);
             space.empty.store(true, Ordering::Relaxed);
+            space.worker_process.store(false, Ordering::Relaxed);
 
             return DequeueStatus::Ok(executable_task);
         }
