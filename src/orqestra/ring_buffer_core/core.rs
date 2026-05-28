@@ -54,7 +54,7 @@ where
     /// serves to indicate whether the space is empty
     empty: AtomicBool,
 
-    /// enqueue process
+    ///
     enqueue_process: AtomicBool,
 
     ///
@@ -164,18 +164,20 @@ where
     /// Because secondary_list is dynamic,
     /// it can cause memory problems if there are too many executable tasks.
     pub(crate) fn enqueue(&self, executable_task: ExecutableTask<T, J, O>) {
-        if self.registered_count.fetch_add(1, Ordering::Release) >= RING_BUFFER_SIZE {
-            self.registered_count.fetch_sub(1, Ordering::Release);
-            println!("secondary");
+        if self.registered_count.fetch_add(1, Ordering::Relaxed) >= RING_BUFFER_SIZE {
+            self.registered_count.fetch_sub(1, Ordering::Relaxed);
             self.secondary_push(executable_task);
             return;
         };
-        println!("ring-buffer");
 
         self.in_task.fetch_add(1, Ordering::Relaxed);
         let idx = self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
         unsafe {
             let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
+
+            if space.enqueue_process.swap(true, Ordering::Relaxed) {
+                panic!("Thread anjing, malah balapan mereka")
+            }
 
             let mut yield_counter = 0;
             while !space.empty.load(Ordering::Relaxed) {
@@ -189,6 +191,7 @@ where
 
             space.task = Some(executable_task);
             space.empty.store(false, Ordering::Relaxed);
+            space.enqueue_process.store(false, Ordering::Relaxed);
         }
     }
 
@@ -312,7 +315,7 @@ where
 
             let executable_task = space.task.take().unwrap();
 
-            self.registered_count.fetch_sub(1, Ordering::Release);
+            self.registered_count.fetch_sub(1, Ordering::Relaxed);
             space.empty.store(true, Ordering::Relaxed);
             space.worker_process.store(false, Ordering::Relaxed);
 
@@ -335,7 +338,7 @@ where
 
             let executable_task = space.task.take().unwrap();
 
-            self.registered_count.fetch_sub(1, Ordering::Release);
+            self.registered_count.fetch_sub(1, Ordering::Relaxed);
             space.empty.store(true, Ordering::Relaxed);
             space.worker_process.store(false, Ordering::Relaxed);
 

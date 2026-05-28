@@ -8,6 +8,7 @@ use std::{
 };
 
 use orqestra::{Job, JobDep, Orqestra, OrqestraJobTrait, OrqestraTaskTrait};
+
 struct MyTask;
 impl OrqestraTaskTrait<()> for MyTask {
     fn execute(&self) -> () {
@@ -28,14 +29,14 @@ impl OrqestraJobTrait<()> for MyJob {
 }
 
 fn main() {
-    let orqestra: Orqestra<MyTask, MyJob, _, 16, 8> = Orqestra::new();
+    let orqestra: Orqestra<MyTask, MyJob, _, 16, 16> = Orqestra::new();
     let job_count = Arc::new(AtomicUsize::new(0));
     let child_job_count = Arc::new(AtomicUsize::new(0));
 
     for i in 0..1000 {
         let job = Job::new(MyJob(
             |_, idx, counter| {
-                sleep(Duration::from_millis(250));
+                // sleep(Duration::from_millis(1000));
                 // println!("done job {}", idx);
                 // counter.fetch_add(1, Ordering::Relaxed);
             },
@@ -45,7 +46,7 @@ fn main() {
 
         Job::new(MyJob(
             |_, idx, counter| {
-                sleep(Duration::from_millis(250));
+                // sleep(Duration::from_millis(1000));
                 // println!("done child job {}", idx);
                 // counter.fetch_add(1, Ordering::Relaxed);
             },
