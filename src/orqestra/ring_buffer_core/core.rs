@@ -54,6 +54,9 @@ where
     /// serves to indicate whether the space is empty
     empty: AtomicBool,
 
+    /// enqueue process
+    enqueue_process: AtomicBool,
+
     ///
     worker_process: AtomicBool,
 }
@@ -68,6 +71,7 @@ where
         Self {
             task: None,
             empty: AtomicBool::new(true),
+            enqueue_process: AtomicBool::new(false),
             worker_process: AtomicBool::new(false),
         }
     }
@@ -162,9 +166,11 @@ where
     pub(crate) fn enqueue(&self, executable_task: ExecutableTask<T, J, O>) {
         if self.registered_count.fetch_add(1, Ordering::Release) >= RING_BUFFER_SIZE {
             self.registered_count.fetch_sub(1, Ordering::Release);
+            println!("secondary");
             self.secondary_push(executable_task);
             return;
         };
+        println!("ring-buffer");
 
         self.in_task.fetch_add(1, Ordering::Relaxed);
         let idx = self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
@@ -235,40 +241,48 @@ where
     /// If you get an index that points to a non-empty space,
     /// then the executable task that occupies that space will be swapped with the executable task you want to insert,
     /// the result of the swapped executable task will be the return value.
-    pub(crate) fn enqueue_or_swap(
-        &self,
-        executable_task: ExecutableTask<T, J, O>,
-    ) -> Option<ExecutableTask<T, J, O>> {
-        self.in_task.fetch_add(1, Ordering::Relaxed);
-        let idx = self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
+    // pub(crate) fn enqueue_or_swap(
+    //     &self,
+    //     executable_task: ExecutableTask<T, J, O>,
+    // ) -> Option<ExecutableTask<T, J, O>> {
+    //     self.in_task.fetch_add(1, Ordering::Relaxed);
+    //     let idx = self.head.fetch_add(1, Ordering::Relaxed) as usize & (RING_BUFFER_SIZE - 1);
 
-        unsafe {
-            let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
+    //     unsafe {
+    //         let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
 
-            if space.empty.load(Ordering::Relaxed) {
-                // enqueue
-                space.task = Some(executable_task);
-                self.registered_count.fetch_add(1, Ordering::Release);
-                space.empty.store(false, Ordering::Relaxed);
-                None
-            } else {
-                // swap
-                if space.worker_process.swap(true, Ordering::Relaxed) {
-                    while space.worker_process.load(Ordering::Relaxed) {
-                        spin_loop();
-                    }
+    //         if space.empty.load(Ordering::Relaxed) {
+    //             // enqueue
+    //             if space.enqueue_process.swap(true, Ordering::Relaxed) {
+    //                 while space.enqueue_process.load(Ordering::Acquire) {
+    //                     spin_loop();
+    //                 }
+    //             }
 
-                    // enqueue
-                    space.task = Some(executable_task);
-                    self.registered_count.fetch_add(1, Ordering::Release);
-                    space.empty.store(false, Ordering::Relaxed);
-                    return None;
-                }
+    //             space.task = Some(executable_task);
+    //             self.registered_count.fetch_add(1, Ordering::Release);
+    //             space.empty.store(false, Ordering::Relaxed);
+    //             None
+    //         } else {
+    //             if space.worker_process.swap(true, Ordering::Relaxed) {
+    //                 while space.worker_process.load(Ordering::Relaxed) {
+    //                     spin_loop();
+    //                 }
 
-                Some(space.task.replace(executable_task).unwrap())
-            }
-        }
-    }
+    //                 // enqueue
+    //                 space.task = Some(executable_task);
+    //                 self.registered_count.fetch_add(1, Ordering::Release);
+    //                 space.empty.store(false, Ordering::Relaxed);
+    //                 return None;
+    //             }
+
+    //             // swap
+    //             let replace = space.task.replace(executable_task).unwrap();
+    //             space.worker_process.store(false, Ordering::Relaxed);
+    //             Some(replace)
+    //         }
+    //     }
+    // }
 
     /// directly insert the executable task into the secondary_list
     pub(crate) fn secondary_push(&self, executable_task: ExecutableTask<T, J, O>) {

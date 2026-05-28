@@ -91,7 +91,7 @@ where
             }
 
             let saving_job = if let Some(save_job) = self.saving_jobs.pop_front() {
-                self.ring_buffer.enqueue_or_swap(save_job);
+                self.ring_buffer.enqueue(save_job);
                 None
             } else {
                 None
