@@ -38,6 +38,8 @@ where
     /// useful for workers to periodically check the location at the index obtained until
     /// the main thread or other workers fill the index location with a new ExecutableTask.
     Order(usize),
+
+    None,
 }
 
 /// Ring Buffer Space, functions as a space where Executable Tasks are stored.
@@ -176,7 +178,9 @@ where
             let space = &mut (&mut (*self.queue.load(Ordering::Relaxed)))[idx];
 
             if space.enqueue_process.swap(true, Ordering::Relaxed) {
-                panic!("Thread anjing, malah balapan mereka")
+                self.registered_count.fetch_sub(1, Ordering::Relaxed);
+                self.secondary_push(executable_task);
+                return;
             }
 
             let mut yield_counter = 0;
@@ -313,7 +317,12 @@ where
                 spin_loop();
             }
 
-            let executable_task = space.task.take().unwrap();
+            let executable_task = if let Some(executable_task) = space.task.take() {
+                executable_task
+            } else {
+                space.worker_process.store(false, Ordering::Relaxed);
+                return DequeueStatus::None;
+            };
 
             self.registered_count.fetch_sub(1, Ordering::Relaxed);
             space.empty.store(true, Ordering::Relaxed);
@@ -336,7 +345,12 @@ where
                 spin_loop();
             }
 
-            let executable_task = space.task.take().unwrap();
+            let executable_task = if let Some(executable_task) = space.task.take() {
+                executable_task
+            } else {
+                space.worker_process.store(false, Ordering::Relaxed);
+                return DequeueStatus::None;
+            };
 
             self.registered_count.fetch_sub(1, Ordering::Relaxed);
             space.empty.store(true, Ordering::Relaxed);

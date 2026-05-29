@@ -113,6 +113,10 @@ where
                         Some(executable_task)
                     }
                     DequeueStatus::Order(_) => None,
+                    DequeueStatus::None => {
+                        self.order = None;
+                        None
+                    }
                 }
             } else if let Some(executable_task) = saving_job {
                 Some(executable_task)
@@ -123,6 +127,7 @@ where
                         self.order = Some(idx);
                         None
                     }
+                    DequeueStatus::None => None,
                 }
             };
 
